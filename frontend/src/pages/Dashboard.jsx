@@ -64,15 +64,15 @@ export default function Dashboard() {
         </p>
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
           {signedIn ? (
-            <ButtonLink to="/dashboard" className="min-h-14 bg-white text-lg text-teal-900 hover:bg-teal-50">
+            <ButtonLink to="/dashboard" variant="onDark" className="min-h-14 text-lg">
               Go to my dashboard
             </ButtonLink>
           ) : (
             <>
-              <ButtonLink to="/register" className="min-h-14 bg-white text-lg text-teal-900 hover:bg-teal-50">
+              <ButtonLink to="/register" variant="onDark" className="min-h-14 text-lg">
                 Create an account
               </ButtonLink>
-              <ButtonLink to="/login" variant="secondary" className="min-h-14 border-white bg-transparent text-lg text-white hover:bg-teal-800">
+              <ButtonLink to="/login" variant="onDarkOutline" className="min-h-14 text-lg">
                 Sign in
               </ButtonLink>
             </>

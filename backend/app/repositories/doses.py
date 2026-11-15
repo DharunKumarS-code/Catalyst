@@ -180,11 +180,16 @@ class DoseRepository:
 
     # ---- reminder engine ----
 
+    # Fields the reminder cycle reads (services.notifications); it runs every minute, so keep it small.
+    REMINDER_FIELDS = dict.fromkeys(
+        ("user_id", "medication_id", "profile_id", "scheduled_at", "local_date", "local_time", "is_demo"), 1
+    )
+
     def pending_between(self, start: datetime, end: datetime, *, include_start: bool) -> list[dict]:
         """Unrecorded doses scheduled in (start, end] or [start, end], across all owners."""
         lower = "$gte" if include_start else "$gt"
         return list(
-            self._doses.find({"status": "pending", "scheduled_at": {lower: start, "$lte": end}}, WITHOUT_HISTORY)
+            self._doses.find({"status": "pending", "scheduled_at": {lower: start, "$lte": end}}, self.REMINDER_FIELDS)
         )
 
     def status_of(self, dose_id: ObjectId) -> str | None:

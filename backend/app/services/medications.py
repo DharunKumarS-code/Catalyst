@@ -192,17 +192,29 @@ class MedicationService:
         return out
 
     def today(self, scope: Scope, now: datetime) -> tuple[str, list[DoseOut]]:
-        self.ensure_schedule(scope, now)
+        active = self.meds.list_for_user(scope.owner_id, status="active")
+        self.ensure_schedule(scope, now, active)
         day = scope.today(now).isoformat()
-        return day, self.dose_views(scope, self.doses.for_day(scope.owner_id, day), now)
+        docs = self.doses.for_day(scope.owner_id, day)
+        return day, self.dose_views(scope, docs, now, meds=self._with_missing(scope, docs, active))
 
     def history(
         self, scope: Scope, now: datetime, *, days: int, medication_id: ObjectId | None, limit: int
     ) -> list[DoseOut]:
-        self.ensure_schedule(scope, now)
+        active = self.meds.list_for_user(scope.owner_id, status="active")
+        self.ensure_schedule(scope, now, active)
         since = local_midnight_utc(scope.today(now) - timedelta(days=days - 1), scope.tz)
         docs = self.doses.history(scope.owner_id, since=since, until=now, medication_id=medication_id, limit=limit)
-        return self.dose_views(scope, docs, now)
+        return self.dose_views(scope, docs, now, meds=self._with_missing(scope, docs, active))
+
+    def _with_missing(self, scope: Scope, docs: list[dict], loaded: list[dict]) -> dict:
+        """{id: medication} for `docs`: reuses `loaded`, and fetches only the rest
+        (e.g. discontinued medications in history) — no query when nothing is missing."""
+        meds = {m["_id"]: m for m in loaded}
+        missing = list({d["medication_id"] for d in docs} - meds.keys())
+        if missing:
+            meds.update(self.meds.get_many(scope.owner_id, missing))
+        return meds
 
     def set_status(self, scope: Scope, dose_id: ObjectId, *, new: str, expected: str, now: datetime) -> DoseOut:
         if not scope.may_record:
