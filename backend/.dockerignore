@@ -1,0 +1,14 @@
+# Never send secrets or local artefacts to the build context.
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+tests/
+*.log
+.git/
+Dockerfile
+.dockerignore

@@ -1,0 +1,15 @@
+# Files excluded when running `gcloud run deploy --source backend` (Cloud Build upload).
+# Secrets and local artefacts must never be uploaded.
+.gcloudignore
+.git/
+.gitignore
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+tests/
+*.log
