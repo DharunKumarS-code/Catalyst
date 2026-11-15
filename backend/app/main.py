@@ -12,11 +12,13 @@ from pymongo.errors import PyMongoError
 from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging
+from app.core.security import HashingBusyError, configure_hashing
 from app.db.mongodb import mongodb
 from app.services.scheduler import scheduler
 
 settings = get_settings()
 configure_logging(settings.debug)
+configure_hashing(settings.password_hash_concurrency)
 logger = logging.getLogger("app")
 
 
@@ -34,14 +36,19 @@ app = FastAPI(
     version=settings.app_version,
     debug=settings.debug,
     lifespan=lifespan,
+    # Interactive API docs are a development aid; production does not advertise its API surface.
+    docs_url=None if settings.is_production else "/docs",
+    redoc_url=None if settings.is_production else "/redoc",
+    openapi_url=None if settings.is_production else "/openapi.json",
 )
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
-    allow_credentials=True,
+    # Bearer tokens, not cookies: credentials mode is not needed, and only these headers are sent.
+    allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 
@@ -51,6 +58,15 @@ async def validation_error_handler(_: Request, exc: RequestValidationError) -> J
     # passwords back in responses and logs. Return only location, message and type.
     errors = [{"loc": e.get("loc"), "msg": e.get("msg"), "type": e.get("type")} for e in exc.errors()]
     return JSONResponse(status_code=422, content={"detail": errors})
+
+
+@app.exception_handler(HashingBusyError)
+async def hashing_busy_handler(_: Request, __: HashingBusyError) -> JSONResponse:
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "The service is busy. Please try again in a moment."},
+        headers={"Retry-After": "5"},
+    )
 
 
 @app.exception_handler(PyMongoError)
@@ -70,4 +86,7 @@ app.include_router(api_router)
 
 @app.get("/", include_in_schema=False)
 def root() -> dict[str, str]:
-    return {"name": settings.app_name, "docs": "/docs", "health": "/api/health"}
+    info = {"name": settings.app_name, "health": "/api/health"}
+    if not settings.is_production:
+        info["docs"] = "/docs"
+    return info

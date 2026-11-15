@@ -1,5 +1,5 @@
 import re
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, StringConstraints, field_validator
@@ -11,12 +11,22 @@ AppointmentStatus = Literal["scheduled", "completed", "cancelled"]
 MAX_YEARS_AHEAD = 5
 
 
-def _optional(max_length: int):
-    return Annotated[
-        Annotated[str, StringConstraints(strip_whitespace=True, max_length=max_length)] | None,
-        BeforeValidator(blank_to_none),
-    ]
-
+# Optional trimmed strings: blank input becomes None. Explicit aliases so type checkers accept them.
+Optional50 = Annotated[
+    Annotated[str, StringConstraints(strip_whitespace=True, max_length=50)] | None, BeforeValidator(blank_to_none)
+]
+Optional100 = Annotated[
+    Annotated[str, StringConstraints(strip_whitespace=True, max_length=100)] | None, BeforeValidator(blank_to_none)
+]
+Optional300 = Annotated[
+    Annotated[str, StringConstraints(strip_whitespace=True, max_length=300)] | None, BeforeValidator(blank_to_none)
+]
+Optional500 = Annotated[
+    Annotated[str, StringConstraints(strip_whitespace=True, max_length=500)] | None, BeforeValidator(blank_to_none)
+]
+Optional1000 = Annotated[
+    Annotated[str, StringConstraints(strip_whitespace=True, max_length=1000)] | None, BeforeValidator(blank_to_none)
+]
 
 Required100 = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
 Required150 = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=150)]
@@ -29,14 +39,14 @@ class AppointmentIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     doctor_name: Required100
-    specialization: _optional(100) = None
+    specialization: Optional100 = None
     clinic_name: Required150
-    clinic_address: _optional(300) = None
+    clinic_address: Optional300 = None
     appointment_date: date
     appointment_time: str
-    appointment_type: _optional(50) = None
-    reason: _optional(500) = None
-    notes: _optional(1000) = None
+    appointment_type: Optional50 = None
+    reason: Optional500 = None
+    notes: Optional1000 = None
 
     @field_validator("doctor_name", "clinic_name")
     @classmethod
@@ -58,7 +68,7 @@ class AppointmentIn(BaseModel):
     def _plausible_date(cls, value: date) -> date:
         if value.year < 2000:
             raise ValueError("Enter a date after the year 2000.")
-        if value > datetime.now(timezone.utc).date() + timedelta(days=366 * MAX_YEARS_AHEAD):
+        if value > datetime.now(UTC).date() + timedelta(days=366 * MAX_YEARS_AHEAD):
             raise ValueError(f"The appointment must be within the next {MAX_YEARS_AHEAD} years.")
         return value
 

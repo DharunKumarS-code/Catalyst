@@ -90,7 +90,10 @@ def test_profiles_are_isolated_per_owner(client):
     create_profile(client, a, full_name="Alice Owner")
     # B has no profile; /me never returns A's profile, and B's update cannot touch it.
     assert client.get("/api/profiles/me", headers=b["headers"]).status_code == 404
-    assert client.put("/api/profiles/me", json={**PROFILE, "full_name": "Hijacked"}, headers=b["headers"]).status_code == 404
+    assert (
+        client.put("/api/profiles/me", json={**PROFILE, "full_name": "Hijacked"}, headers=b["headers"]).status_code
+        == 404
+    )
     assert client.get("/api/profiles/me", headers=a["headers"]).json()["full_name"] == "Alice Owner"
 
 

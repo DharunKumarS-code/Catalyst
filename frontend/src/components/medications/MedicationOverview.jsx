@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import { getApiErrorMessage } from '../../api/client'
-import { getAdherence, getTodaySchedule, listMedications } from '../../api/medications'
+import { getMedicationOverview } from '../../api/medications'
 import { useResource } from '../../hooks/useResource'
 import Alert from '../ui/Alert'
 import { ButtonLink } from '../ui/Button'
@@ -14,23 +14,12 @@ import TodaySchedule from './TodaySchedule'
  * doses) and, read-only, by caretakers/family members (`profileId` set).
  */
 export default function MedicationOverview({ profileId, canModify, medicationHref, historyHref }) {
-  const loadToday = useCallback((signal) => getTodaySchedule({ profileId }, signal), [profileId])
-  const loadAdherence = useCallback((signal) => getAdherence({ profileId }, signal), [profileId])
-  const loadMeds = useCallback((signal) => listMedications({ profileId }, signal), [profileId])
-  const today = useResource(loadToday)
-  const adherence = useResource(loadAdherence)
-  const meds = useResource(loadMeds)
-  const { reload: reloadToday } = today
-  const { reload: reloadAdherence } = adherence
+  // One request for the whole page (it used to take three).
+  const load = useCallback((signal) => getMedicationOverview({ profileId }, signal), [profileId])
+  const { data, error, reload: onChanged } = useResource(load)
 
-  const onChanged = useCallback(() => {
-    reloadToday()
-    reloadAdherence()
-  }, [reloadToday, reloadAdherence])
-
-  const firstError = today.error || adherence.error || meds.error
-  if (firstError && !today.data) {
-    if (canModify && firstError.response?.status === 409) {
+  if (error && !data) {
+    if (canModify && error.response?.status === 409) {
       return (
         <div className="flex flex-col items-start gap-4">
           <Alert variant="info">Create your profile first, so we know your time zone for medication times.</Alert>
@@ -38,22 +27,24 @@ export default function MedicationOverview({ profileId, canModify, medicationHre
         </div>
       )
     }
-    return <Alert variant="error">{getApiErrorMessage(firstError, 'We could not load medications.')}</Alert>
+    return <Alert variant="error">{getApiErrorMessage(error, 'We could not load medications.')}</Alert>
   }
-  if (!today.data || !adherence.data || !meds.data) return <PageLoader label="Loading medications…" />
+  if (!data) return <PageLoader label="Loading medications…" />
 
-  const active = meds.data.filter((m) => m.status === 'active')
-  const stopped = meds.data.filter((m) => m.status !== 'active')
+  const active = data.medications.filter((m) => m.status === 'active')
+  const stopped = data.medications.filter((m) => m.status !== 'active')
 
   return (
     <div className="flex flex-col gap-8">
       <TodaySchedule
-        schedule={today.data}
-        canModify={canModify}
+        schedule={data.today}
+        // Members: the server marks each dose recordable only for a caretaker with permission.
+        canModify={canModify || Boolean(profileId)}
+        profileId={profileId}
         onChanged={onChanged}
         emptyText={active.length === 0 ? 'No medicines have been added yet.' : undefined}
       />
-      <AdherenceSummary adherence={adherence.data} />
+      <AdherenceSummary adherence={data.adherence} />
 
       <section aria-labelledby="meds-heading">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">

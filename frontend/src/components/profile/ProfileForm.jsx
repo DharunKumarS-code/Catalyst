@@ -90,10 +90,10 @@ export default function ProfileForm({ initialProfile, submitLabel, onSubmit, onC
         />
         <FormField {...field('address', { label: 'Address (optional)', multiline: true, rows: 3, autoComplete: 'street-address' })} />
         <div>
-          <label htmlFor="profile-timezone" className="block text-sm font-medium text-slate-800">
+          <label htmlFor="profile-timezone" className="block text-base font-medium text-slate-800">
             Time zone
           </label>
-          <p id="profile-timezone-hint" className="mt-1 text-sm text-slate-500">
+          <p id="profile-timezone-hint" className="mt-1 text-base text-slate-500">
             Medication times follow this local time. We suggest the one your device uses.
           </p>
           <select
@@ -112,7 +112,7 @@ export default function ProfileForm({ initialProfile, submitLabel, onSubmit, onC
             ))}
           </select>
           {errors.timezone && (
-            <p id="profile-timezone-error" className="mt-1.5 text-sm font-medium text-rose-700">
+            <p id="profile-timezone-error" className="mt-1.5 text-base font-medium text-rose-700">
               {errors.timezone}
             </p>
           )}

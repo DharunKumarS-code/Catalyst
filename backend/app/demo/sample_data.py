@@ -40,17 +40,36 @@ DEMO_PROFILE = ProfileIn(
 def _sample_medications(start: str) -> list[MedicationIn]:
     common = {"start_date": start, "prescribing_doctor": "Dr. Demo (sample)"}
     return [
-        MedicationIn(name="Vitamin D (sample)", dosage="1000 IU", frequency="once_daily", times=["09:00"],
-                     instructions=f"Take with breakfast. {SAMPLE_NOTE}", **common),
-        MedicationIn(name="Metformin (sample)", dosage="500 mg", frequency="twice_daily", times=["08:00", "20:00"],
-                     instructions=f"Take with food. {SAMPLE_NOTE}", **common),
-        MedicationIn(name="Amlodipine (sample)", dosage="5 mg", frequency="once_daily", times=["21:00"],
-                     instructions=SAMPLE_NOTE, **common),
+        MedicationIn(
+            name="Vitamin D (sample)",
+            dosage="1000 IU",
+            frequency="once_daily",
+            times=["09:00"],
+            instructions=f"Take with breakfast. {SAMPLE_NOTE}",
+            **common,
+        ),
+        MedicationIn(
+            name="Metformin (sample)",
+            dosage="500 mg",
+            frequency="twice_daily",
+            times=["08:00", "20:00"],
+            instructions=f"Take with food. {SAMPLE_NOTE}",
+            **common,
+        ),
+        MedicationIn(
+            name="Amlodipine (sample)",
+            dosage="5 mg",
+            frequency="once_daily",
+            times=["21:00"],
+            instructions=SAMPLE_NOTE,
+            **common,
+        ),
     ]
 
 
-def provision_demo_sample_data(db: Database, *, horizon_days: int, early_minutes: int,
-                               now: datetime | None = None) -> dict[str, str]:
+def provision_demo_sample_data(
+    db: Database, *, horizon_days: int, early_minutes: int, now: datetime | None = None
+) -> dict[str, str]:
     now = now or utc_now()
     users = UserRepository(db)
     profiles = ProfileRepository(db)
@@ -73,8 +92,9 @@ def provision_demo_sample_data(db: Database, *, horizon_days: int, early_minutes
     else:
         results["demo profile"] = "already_exists"
 
-    service = MedicationService(MedicationRepository(db), DoseRepository(db),
-                                horizon_days=horizon_days, early_minutes=early_minutes)
+    service = MedicationService(
+        MedicationRepository(db), DoseRepository(db), horizon_days=horizon_days, early_minutes=early_minutes
+    )
     scope = Scope(owner_id=elderly["_id"], profile=profile, can_modify=True)
     if service.meds.list_for_user(elderly["_id"]):
         results["sample medications"] = "already_exist"
@@ -86,9 +106,14 @@ def provision_demo_sample_data(db: Database, *, horizon_days: int, early_minutes
             service.create(scope, med.to_document(), now, schedule_from=since)
         past = service.doses.for_day(elderly["_id"], yesterday.isoformat())
         for i, dose in enumerate(past):  # yesterday: all taken except the last dose, missed
-            service.doses.transition(dose["_id"], elderly["_id"], expected="pending",
-                                     new="missed" if i == len(past) - 1 else "taken",
-                                     now=dose["scheduled_at"] + timedelta(minutes=10), by=elderly["_id"])
+            service.doses.transition(
+                dose["_id"],
+                elderly["_id"],
+                expected="pending",
+                new="missed" if i == len(past) - 1 else "taken",
+                now=dose["scheduled_at"] + timedelta(minutes=10),
+                by=elderly["_id"],
+            )
         results["sample medications"] = "created"
 
     appointments = AppointmentService(AppointmentRepository(db))
@@ -107,9 +132,15 @@ def provision_demo_sample_data(db: Database, *, horizon_days: int, early_minutes
             results[key] = "already_exists"
             continue
         try:
-            relationships.create(profile_id=profile["_id"], elderly_user_id=elderly["_id"],
-                                 member_user_id=member["_id"], role=role.value, invitation_id=None,
-                                 now=now, is_demo=True)
+            relationships.create(
+                profile_id=profile["_id"],
+                elderly_user_id=elderly["_id"],
+                member_user_id=member["_id"],
+                role=role.value,
+                invitation_id=None,
+                now=now,
+                is_demo=True,
+            )
             results[key] = "created"
         except RelationshipExistsError:
             results[key] = "already_exists"
@@ -120,18 +151,50 @@ def _create_sample_appointments(service: AppointmentService, scope: Scope, now: 
     today = scope.today(now)
 
     def appt(days: int, time: str, **fields) -> AppointmentIn:
-        return AppointmentIn(appointment_date=today + timedelta(days=days), appointment_time=time,
-                             notes=SAMPLE_NOTE, **fields)
+        return AppointmentIn(
+            appointment_date=today + timedelta(days=days), appointment_time=time, notes=SAMPLE_NOTE, **fields
+        )
 
-    service.create(scope, appt(3, "10:30", doctor_name="Dr. Asha Rao (sample)", specialization="Cardiology",
-                               clinic_name="Sample Heart Clinic", clinic_address="1 Demo Street, Sampletown",
-                               appointment_type="Check-up", reason="Blood pressure review"), now)
-    service.create(scope, appt(12, "14:00", doctor_name="Dr. Ben Lee (sample)", specialization="Ophthalmology",
-                               clinic_name="Sample Eye Hospital", appointment_type="Eye test",
-                               reason="Annual eye examination"), now)
+    service.create(
+        scope,
+        appt(
+            3,
+            "10:30",
+            doctor_name="Dr. Asha Rao (sample)",
+            specialization="Cardiology",
+            clinic_name="Sample Heart Clinic",
+            clinic_address="1 Demo Street, Sampletown",
+            appointment_type="Check-up",
+            reason="Blood pressure review",
+        ),
+        now,
+    )
+    service.create(
+        scope,
+        appt(
+            12,
+            "14:00",
+            doctor_name="Dr. Ben Lee (sample)",
+            specialization="Ophthalmology",
+            clinic_name="Sample Eye Hospital",
+            appointment_type="Eye test",
+            reason="Annual eye examination",
+        ),
+        now,
+    )
     # A past visit, recorded as completed, so the history is not empty.
     booked = now - timedelta(days=14)
-    past = service.create(scope, appt(-7, "09:00", doctor_name="Dr. Chen Patel (sample)",
-                                      specialization="General practice", clinic_name="Sample Family Practice",
-                                      appointment_type="Follow-up", reason="Medication review"), booked)
+    past = service.create(
+        scope,
+        appt(
+            -7,
+            "09:00",
+            doctor_name="Dr. Chen Patel (sample)",
+            specialization="General practice",
+            clinic_name="Sample Family Practice",
+            appointment_type="Follow-up",
+            reason="Medication review",
+        ),
+        booked,
+    )
     service.repo.transition(past["_id"], scope.owner_id, new="completed", now=now)

@@ -74,7 +74,7 @@ class MongoDB:
         if self._indexes_ready:
             return True
         try:
-            ensure_indexes(self.db)
+            ensure_indexes(self.db, notification_retention_days=self._settings.notification_retention_days)
         except (PyMongoError, RuntimeError) as exc:
             logger.warning("Could not ensure MongoDB indexes: %s", type(exc).__name__)
             return False

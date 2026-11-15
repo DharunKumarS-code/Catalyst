@@ -2,6 +2,7 @@
 
 from pymongo import ASCENDING, DESCENDING
 from pymongo.database import Database
+from pymongo.errors import OperationFailure
 
 USERS_COLLECTION = "users"
 PROFILES_COLLECTION = "elderly_profiles"
@@ -15,12 +16,13 @@ NOTIFICATIONS_COLLECTION = "notifications"
 NOTIFICATION_PREFERENCES_COLLECTION = "notification_preferences"
 LOGIN_FAILURES_COLLECTION = "login_failures"
 SCHEDULER_LOCKS_COLLECTION = "scheduler_locks"
+RATE_LIMITS_COLLECTION = "rate_limits"
 
 # Expired invitations are kept for this long (audit trail), then removed by a TTL index.
 INVITATION_RETENTION_SECONDS = 30 * 24 * 3600
 
 
-def ensure_indexes(db: Database) -> None:
+def ensure_indexes(db: Database, *, notification_retention_days: int = 180) -> None:
     # Unique email is the authoritative guard against duplicate registrations (race-safe).
     db[USERS_COLLECTION].create_index([("email", ASCENDING)], unique=True, name="uniq_email")
 
@@ -29,9 +31,7 @@ def ensure_indexes(db: Database) -> None:
 
     invitations = db[INVITATIONS_COLLECTION]
     invitations.create_index([("code_hash", ASCENDING)], unique=True, name="uniq_code_hash")
-    invitations.create_index(
-        [("elderly_user_id", ASCENDING), ("created_at", DESCENDING)], name="invitations_by_owner"
-    )
+    invitations.create_index([("elderly_user_id", ASCENDING), ("created_at", DESCENDING)], name="invitations_by_owner")
     invitations.create_index(
         [("expires_at", ASCENDING)], expireAfterSeconds=INVITATION_RETENTION_SECONDS, name="invitations_ttl"
     )
@@ -56,18 +56,25 @@ def ensure_indexes(db: Database) -> None:
     medications.create_index(
         [("user_id", ASCENDING), ("status", ASCENDING), ("name", ASCENDING)], name="medications_by_owner"
     )
+    # The reminder cycle's schedule top-up: active medications whose doses end before the horizon.
+    medications.create_index([("status", ASCENDING), ("scheduled_through", ASCENDING)], name="medications_top_up")
 
     doses = db[DOSES_COLLECTION]
     # Race-safe guard: one dose per medication per instant, so regenerating a schedule never duplicates.
     doses.create_index([("medication_id", ASCENDING), ("scheduled_at", ASCENDING)], unique=True, name="uniq_dose")
     doses.create_index([("user_id", ASCENDING), ("local_date", ASCENDING)], name="doses_by_owner_day")
     doses.create_index([("user_id", ASCENDING), ("scheduled_at", DESCENDING)], name="doses_by_owner_time")
+    # Reminder cycle: pending doses in a time window, across all owners.
+    doses.create_index([("status", ASCENDING), ("scheduled_at", ASCENDING)], name="doses_due")
 
     appointments = db[APPOINTMENTS_COLLECTION]
     appointments.create_index(
-        [("user_id", ASCENDING), ("status", ASCENDING), ("scheduled_at", ASCENDING)], name="appointments_by_owner_status"
+        [("user_id", ASCENDING), ("status", ASCENDING), ("scheduled_at", ASCENDING)],
+        name="appointments_by_owner_status",
     )
     appointments.create_index([("user_id", ASCENDING), ("scheduled_at", DESCENDING)], name="appointments_by_owner_time")
+    # Reminder cycle: scheduled appointments in a time window, across all owners.
+    appointments.create_index([("status", ASCENDING), ("scheduled_at", ASCENDING)], name="appointments_due")
     # Race-safe duplicate guard: one SCHEDULED appointment per owner, doctor and instant.
     appointments.create_index(
         [("user_id", ASCENDING), ("doctor_key", ASCENDING), ("scheduled_at", ASCENDING)],
@@ -80,7 +87,9 @@ def ensure_indexes(db: Database) -> None:
     # Race- and restart-safe: each reminder/alert exists at most once per event and recipient.
     notifications.create_index([("dedupe_key", ASCENDING)], unique=True, name="uniq_notification")
     notifications.create_index([("status", ASCENDING), ("next_attempt_at", ASCENDING)], name="notifications_due")
-    notifications.create_index([("owner_user_id", ASCENDING), ("created_at", DESCENDING)], name="notifications_by_owner")
+    notifications.create_index(
+        [("owner_user_id", ASCENDING), ("created_at", DESCENDING)], name="notifications_by_owner"
+    )
     notifications.create_index(
         [("recipient_user_id", ASCENDING), ("created_at", DESCENDING)], name="notifications_by_recipient"
     )
@@ -89,3 +98,24 @@ def ensure_indexes(db: Database) -> None:
     login_failures = db[LOGIN_FAILURES_COLLECTION]
     login_failures.create_index([("email", ASCENDING), ("created_at", DESCENDING)], name="login_failures_by_email")
     login_failures.create_index([("created_at", ASCENDING)], expireAfterSeconds=24 * 3600, name="login_failures_ttl")
+    login_failures.create_index([("ip", ASCENDING), ("created_at", DESCENDING)], name="login_failures_by_ip")
+
+    rate_limits = db[RATE_LIMITS_COLLECTION]
+    rate_limits.create_index(
+        [("bucket", ASCENDING), ("key", ASCENDING), ("created_at", DESCENDING)], name="rate_limits_lookup"
+    )
+    rate_limits.create_index([("created_at", ASCENDING)], expireAfterSeconds=24 * 3600, name="rate_limits_ttl")
+
+    # Notification history (with recipient addresses) is not kept forever.
+    _ensure_ttl(
+        db, NOTIFICATIONS_COLLECTION, "created_at", notification_retention_days * 24 * 3600, "notifications_retention"
+    )
+
+
+def _ensure_ttl(db: Database, collection: str, field: str, seconds: int, name: str) -> None:
+    """Create a TTL index, or update its expiry in place if the retention setting changed
+    (create_index would otherwise fail with an options conflict)."""
+    try:
+        db[collection].create_index([(field, ASCENDING)], expireAfterSeconds=seconds, name=name)
+    except OperationFailure:
+        db.command("collMod", collection, index={"name": name, "expireAfterSeconds": seconds})

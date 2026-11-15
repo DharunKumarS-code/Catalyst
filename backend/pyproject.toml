@@ -1,0 +1,28 @@
+# Tool configuration only: the app is not packaged (dependencies live in requirements*.txt).
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["app"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 90
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]
+# B008: FastAPI `Depends()` defaults are idiomatic. UP042: StrEnum changes str() output (API-visible).
+ignore = ["B008", "UP042"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+check_untyped_defs = true
+plugins = ["pydantic.mypy"]

@@ -31,7 +31,7 @@ export default function DoseHistory({ doses, showMedication = true }) {
                     </p>
                   )}
                   {dose.status_changed_at && dose.status !== 'pending' && (
-                    <p className="text-sm text-slate-500">Recorded {formatDateTime(dose.status_changed_at)}</p>
+                    <p className="text-base text-slate-500">Recorded {formatDateTime(dose.status_changed_at)}</p>
                   )}
                 </div>
                 <DoseStatusBadge dose={dose} />

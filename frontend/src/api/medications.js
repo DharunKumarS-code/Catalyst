@@ -34,6 +34,12 @@ export async function deleteMedication(medicationId) {
   await apiClient.delete(`/api/medications/${id(medicationId)}`)
 }
 
+/** Today's doses, adherence and all medications in one request: `{ today, adherence, medications }`. */
+export async function getMedicationOverview({ profileId } = {}, signal) {
+  const { data } = await apiClient.get(`${base(profileId)}/medications/overview`, { signal })
+  return data
+}
+
 export async function getTodaySchedule({ profileId } = {}, signal) {
   const { data } = await apiClient.get(`${base(profileId)}/doses/today`, { signal })
   return data
@@ -47,8 +53,10 @@ export async function getDoseHistory({ profileId, days = 7, medicationId } = {},
 }
 
 /** `expectedStatus` is the status currently shown; the server rejects stale or repeated updates (409). */
-export async function setDoseStatus(doseId, status, expectedStatus) {
-  const { data } = await apiClient.patch(`/api/doses/${id(doseId)}/status`, {
+/** Records a dose. With `profileId`, a caretaker records it for a linked person (needs their permission). */
+export async function setDoseStatus(doseId, status, expectedStatus, { profileId } = {}) {
+  const base = profileId ? `/api/linked-profiles/${id(profileId)}/doses` : '/api/doses'
+  const { data } = await apiClient.patch(`${base}/${id(doseId)}/status`, {
     status,
     expected_status: expectedStatus,
   })

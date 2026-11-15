@@ -15,8 +15,9 @@ from app.repositories.profiles import ProfileRepository
 from app.repositories.relationships import RelationshipRepository
 from app.schemas.care import ActivityItem, CareDashboard, CareProfileSummary
 from app.schemas.medication import AdherencePeriod
+from app.schemas.user import UserPublic
 from app.services.appointments import AppointmentService
-from app.services.medications import MedicationService, Scope, period
+from app.services.medications import MedicationService, Scope, member_scope_for, period
 
 UPCOMING_APPOINTMENTS = 3
 ACTIVITY_DAYS = 7
@@ -36,7 +37,9 @@ class CareDashboardService:
         self.medications = medications
         self.appointments = AppointmentService(appointments)
 
-    def build(self, member_id: ObjectId, member_is_demo: bool, now: datetime) -> CareDashboard:
+    def build(
+        self, member_id: ObjectId, member_is_demo: bool, now: datetime, member: UserPublic | None = None
+    ) -> CareDashboard:
         rels = self.relationships.list_active_for_member(member_id, is_demo=member_is_demo)
         found = self.profiles.get_many([r["profile_id"] for r in rels])
         linked = [
@@ -47,7 +50,13 @@ class CareDashboardService:
         if not linked:
             return CareDashboard(generated_at=now, profiles=[])
 
-        scopes = {p["user_id"]: Scope(owner_id=p["user_id"], profile=p, can_modify=False) for _, p in linked}
+        # The same per-relationship rule as the dose endpoints: only a caretaker with the owner's grant may record.
+        scopes = {
+            p["user_id"]: member_scope_for(r, p, member_id, member.name)
+            if member
+            else Scope(owner_id=p["user_id"], profile=p, can_modify=False)
+            for r, p in linked
+        }
         owners = list(scopes)
 
         meds_all = self.medications.meds.list_for_users(owners)
@@ -80,6 +89,7 @@ class CareDashboardService:
                     relationship_id=str(rel["_id"]),
                     role=rel["role"],
                     connected_at=rel["created_at"],
+                    can_record_doses=scope.may_record,
                     full_name=profile["full_name"],
                     date_of_birth=profile.get("date_of_birth"),
                     phone=profile.get("phone"),
@@ -106,16 +116,27 @@ class CareDashboardService:
             med = meds.get(d["medication_id"])
             if d["user_id"] != owner or med is None:
                 continue
-            items.append(ActivityItem(
-                kind=f"dose_{d['status']}", at=d["status_changed_at"], subject=f"{med['name']} {med['dosage']}",
-                local_date=d["local_date"], local_time=d["local_time"],
-            ))
+            items.append(
+                ActivityItem(
+                    kind=f"dose_{d['status']}",
+                    at=d["status_changed_at"],
+                    subject=f"{med['name']} {med['dosage']}",
+                    local_date=d["local_date"],
+                    local_time=d["local_time"],
+                )
+            )
         for a in updated:
             if a["user_id"] != owner:
                 continue
-            items.append(ActivityItem(
-                kind=f"appointment_{a['status']}", at=a["status_changed_at"], subject=a["doctor_name"],
-                local_date=a["appointment_date"], local_time=a["appointment_time"], place=a["clinic_name"],
-            ))
+            items.append(
+                ActivityItem(
+                    kind=f"appointment_{a['status']}",
+                    at=a["status_changed_at"],
+                    subject=a["doctor_name"],
+                    local_date=a["appointment_date"],
+                    local_time=a["appointment_time"],
+                    place=a["clinic_name"],
+                )
+            )
         items.sort(key=lambda i: i.at, reverse=True)
         return items[:ACTIVITY_PER_PROFILE]

@@ -4,7 +4,7 @@ export default function RoleSelector({ value, onChange, error }) {
   const errorId = error ? 'role-error' : undefined
   return (
     <fieldset aria-describedby={errorId} aria-invalid={error ? 'true' : undefined}>
-      <legend className="text-sm font-medium text-slate-800">I am joining as</legend>
+      <legend className="text-base font-medium text-slate-800">I am joining as</legend>
       <div className="mt-2 grid gap-3 sm:grid-cols-3">
         {ROLE_OPTIONS.map((option) => {
           const checked = value === option.value
@@ -26,13 +26,13 @@ export default function RoleSelector({ value, onChange, error }) {
                 />
                 <span className="font-medium text-slate-900">{option.label}</span>
               </span>
-              <span className="mt-1 text-sm text-slate-600">{option.description}</span>
+              <span className="mt-1 text-base text-slate-600">{option.description}</span>
             </label>
           )
         })}
       </div>
       {error && (
-        <p id={errorId} className="mt-1.5 text-sm font-medium text-rose-700">
+        <p id={errorId} className="mt-1.5 text-base font-medium text-rose-700">
           {error}
         </p>
       )}

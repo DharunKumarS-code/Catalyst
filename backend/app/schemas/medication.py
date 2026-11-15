@@ -1,5 +1,5 @@
 import re
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from enum import Enum
 from typing import Annotated, Literal
 
@@ -72,7 +72,7 @@ class MedicationIn(BaseModel):
     @field_validator("start_date")
     @classmethod
     def _plausible_start(cls, value: date) -> date:
-        today = datetime.now(timezone.utc).date()
+        today = datetime.now(UTC).date()
         if value.year < 2000:
             raise ValueError("Enter a start date after the year 2000.")
         if value > today + timedelta(days=366):
@@ -140,6 +140,10 @@ class DoseOut(BaseModel):
     is_due: bool = False  # scheduled time has passed
     can_mark_taken: bool = False
     can_mark_missed: bool = False
+    # Who recorded the current status ("elderly" or "caretaker"), so the owner can see doses a
+    # caretaker recorded for them.
+    recorded_by_name: str | None = None
+    recorded_by_role: str | None = None
 
 
 class DoseStatusUpdate(BaseModel):
@@ -156,6 +160,14 @@ class TodaySchedule(BaseModel):
     date: str
     timezone: str
     doses: list[DoseOut]
+
+
+class MedicationOverview(BaseModel):
+    """Everything the medicines page shows, in one response."""
+
+    today: "TodaySchedule"
+    adherence: "AdherenceSummary"
+    medications: list[MedicationOut]
 
 
 class AdherencePeriod(BaseModel):
@@ -177,3 +189,6 @@ class AdherenceSummary(BaseModel):
     today: AdherencePeriod
     week: AdherencePeriod
     days: list[AdherenceDay]
+
+
+MedicationOverview.model_rebuild()

@@ -8,7 +8,7 @@ const VARIANTS = {
 export default function StatusBadge({ variant = 'pending', children }) {
   const v = VARIANTS[variant] ?? VARIANTS.pending
   return (
-    <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-medium ring-1 ring-inset ${v.chip}`}>
+    <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-base font-medium ring-1 ring-inset ${v.chip}`}>
       <span className={`h-2.5 w-2.5 rounded-full ${v.dot}`} aria-hidden="true" />
       {children}
     </span>

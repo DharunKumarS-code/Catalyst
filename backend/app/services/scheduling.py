@@ -7,7 +7,7 @@ converted to a UTC instant for storage, so "08:00 in New York" is 13:00Z in wint
 """
 
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 # Days that were never generated (e.g. the app was not opened) are back-filled at most this far.
@@ -22,14 +22,14 @@ class PlannedDose:
 
 
 def local_midnight_utc(day: date, tz: ZoneInfo) -> datetime:
-    return datetime.combine(day, time(0, 0), tzinfo=tz).astimezone(timezone.utc)
+    return datetime.combine(day, time(0, 0), tzinfo=tz).astimezone(UTC)
 
 
 def to_utc(day: date, hhmm: str, tz: ZoneInfo) -> datetime:
     hour, minute = (int(part) for part in hhmm.split(":"))
     # A wall time skipped by a DST jump (e.g. 02:30) resolves to the equivalent instant
     # just after the jump; an ambiguous one (clocks back) uses the first occurrence.
-    return datetime(day.year, day.month, day.day, hour, minute, tzinfo=tz).astimezone(timezone.utc)
+    return datetime(day.year, day.month, day.day, hour, minute, tzinfo=tz).astimezone(UTC)
 
 
 def plan_doses(med: dict, tz: ZoneInfo, now: datetime, horizon_days: int) -> tuple[list[PlannedDose], str | None]:

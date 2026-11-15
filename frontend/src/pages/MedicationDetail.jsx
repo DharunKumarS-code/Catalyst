@@ -27,7 +27,7 @@ function Item({ label, children }) {
     <div className="border-b border-slate-100 py-3 last:border-b-0 sm:grid sm:grid-cols-3 sm:gap-4">
       <dt className="text-base font-medium text-slate-500">{label}</dt>
       <dd className="mt-1 whitespace-pre-line break-words text-lg text-slate-900 sm:col-span-2 sm:mt-0">
-        {children || <span className="text-slate-400">Not provided</span>}
+        {children || <span className="text-slate-600">Not provided</span>}
       </dd>
     </div>
   )

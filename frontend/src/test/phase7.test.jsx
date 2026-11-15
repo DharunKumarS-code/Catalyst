@@ -22,6 +22,9 @@ vi.mock('../api/notifications', () => ({
   updateNotificationPreferences: vi.fn(),
   getNotificationStatus: vi.fn(),
   sendTestNotification: vi.fn(),
+  getUnreadCount: vi.fn(async () => ({ unread: 0, seen_at: null })),
+  markNotificationsSeen: vi.fn(async () => {}),
+  NOTIFICATIONS_SEEN_EVENT: 'eldercare:notifications-seen',
 }))
 
 const at = '2026-11-16T12:00:00+00:00'

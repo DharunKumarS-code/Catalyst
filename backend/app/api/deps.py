@@ -2,7 +2,7 @@
 
 from collections.abc import Callable
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pymongo.database import Database
 
@@ -12,8 +12,8 @@ from app.db.mongodb import mongodb
 from app.repositories.appointments import AppointmentRepository
 from app.repositories.doses import DoseRepository
 from app.repositories.invitations import InvitationRepository, RedemptionFailureRepository
-from app.repositories.profiles import ProfileRepository
 from app.repositories.medications import MedicationRepository
+from app.repositories.profiles import ProfileRepository
 from app.repositories.relationships import RelationshipRepository
 from app.repositories.users import UserRepository
 from app.schemas.user import Role, UserPublic
@@ -69,6 +69,19 @@ def get_dose_repository(db: Database = Depends(get_db)) -> DoseRepository:
 
 def get_appointment_repository(db: Database = Depends(get_db)) -> AppointmentRepository:
     return AppointmentRepository(db)
+
+
+def client_ip(request: Request, settings: Settings = Depends(get_settings)) -> str | None:
+    """The caller's IP for rate limiting, or None when it cannot be trusted (per-IP limits off).
+    With CLIENT_IP_HEADER set (a header the proxy overwrites, e.g. CF-Connecting-IP), that
+    header is used; otherwise the socket address."""
+    if not settings.ip_limits_active:
+        return None
+    if settings.client_ip_header:
+        value = request.headers.get(settings.client_ip_header, "").split(",")[0].strip()
+        if value:
+            return value[:64]
+    return request.client.host if request.client else None
 
 
 def get_auth_settings(settings: Settings = Depends(get_settings)) -> Settings:

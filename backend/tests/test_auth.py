@@ -1,6 +1,6 @@
 """Integration tests for registration, login, token validation and role-based access."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import jwt
 import pytest
@@ -27,6 +27,7 @@ def token_for(client, role, email=None):
 
 
 # ---- Registration ----
+
 
 def test_register_success(client, auth_settings):
     res = register(client)
@@ -80,6 +81,7 @@ def test_register_validation(client, payload):
 
 # ---- Login ----
 
+
 def test_login_success(client):
     register(client)
     res = client.post("/api/auth/login", json={"email": "JANE@example.com", "password": PASSWORD})
@@ -104,6 +106,7 @@ def test_login_wrong_password_and_unknown_email_are_indistinguishable(client):
 
 # ---- Token validation / unauthorized access ----
 
+
 def test_me_requires_token(client):
     res = client.get("/api/auth/me")
     assert res.status_code == 401
@@ -117,11 +120,19 @@ def test_me_rejects_bad_authorization_header(client, header):
 
 def test_expired_token_rejected(client, auth_settings):
     user_id = register(client).json()["user"]["id"]
-    past = datetime.now(timezone.utc) - timedelta(hours=1)
+    past = datetime.now(UTC) - timedelta(hours=1)
     token = jwt.encode(
-        {"sub": user_id, "role": "elderly", "type": "access", "iss": auth_settings.jwt_issuer,
-         "aud": auth_settings.jwt_audience, "iat": past - timedelta(minutes=30), "exp": past},
-        TEST_SECRET, algorithm="HS256",
+        {
+            "sub": user_id,
+            "role": "elderly",
+            "type": "access",
+            "iss": auth_settings.jwt_issuer,
+            "aud": auth_settings.jwt_audience,
+            "iat": past - timedelta(minutes=30),
+            "exp": past,
+        },
+        TEST_SECRET,
+        algorithm="HS256",
     )
     res = client.get("/api/auth/me", headers=bearer(token))
     assert res.status_code == 401
@@ -130,11 +141,19 @@ def test_expired_token_rejected(client, auth_settings):
 
 def test_forged_token_rejected(client, auth_settings):
     user_id = register(client).json()["user"]["id"]
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     forged = jwt.encode(
-        {"sub": user_id, "role": "caretaker", "type": "access", "iss": auth_settings.jwt_issuer,
-         "aud": auth_settings.jwt_audience, "iat": now, "exp": now + timedelta(minutes=5)},
-        "attacker-controlled-secret-key-with-enough-length", algorithm="HS256",
+        {
+            "sub": user_id,
+            "role": "caretaker",
+            "type": "access",
+            "iss": auth_settings.jwt_issuer,
+            "aud": auth_settings.jwt_audience,
+            "iat": now,
+            "exp": now + timedelta(minutes=5),
+        },
+        "attacker-controlled-secret-key-with-enough-length",
+        algorithm="HS256",
     )
     assert client.get("/api/portal/caretaker", headers=bearer(forged)).status_code == 401
 
@@ -146,6 +165,7 @@ def test_token_for_deleted_user_rejected(client):
 
 
 # ---- Role-based access control ----
+
 
 @pytest.mark.parametrize(
     "role,allowed",
@@ -172,11 +192,19 @@ def test_role_claim_in_token_is_not_trusted(client, auth_settings):
     """A validly signed token claiming a different role must not grant that role:
     the role is always read from the stored user record."""
     user_id = register(client, role="elderly").json()["user"]["id"]
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     token = jwt.encode(
-        {"sub": user_id, "role": "caretaker", "type": "access", "iss": auth_settings.jwt_issuer,
-         "aud": auth_settings.jwt_audience, "iat": now, "exp": now + timedelta(minutes=5)},
-        TEST_SECRET, algorithm="HS256",
+        {
+            "sub": user_id,
+            "role": "caretaker",
+            "type": "access",
+            "iss": auth_settings.jwt_issuer,
+            "aud": auth_settings.jwt_audience,
+            "iat": now,
+            "exp": now + timedelta(minutes=5),
+        },
+        TEST_SECRET,
+        algorithm="HS256",
     )
     assert client.get("/api/portal/caretaker", headers=bearer(token)).status_code == 403
     assert client.get("/api/portal/elderly", headers=bearer(token)).status_code == 200

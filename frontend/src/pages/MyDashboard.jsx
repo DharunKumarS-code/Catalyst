@@ -54,13 +54,13 @@ export default function MyDashboard() {
   return (
     <div className="flex flex-col gap-8">
       <section className="rounded-3xl bg-gradient-to-br from-teal-700 to-teal-900 px-6 py-8 text-white shadow-sm sm:px-10">
-        <p className="text-sm font-medium uppercase tracking-wider text-teal-100">My dashboard</p>
+        <p className="text-base font-medium uppercase tracking-wider text-teal-100">My dashboard</p>
         <h1 className="mt-1 text-3xl font-semibold">Hello, {user.name}</h1>
         <p className="mt-2 text-teal-50">You are signed in as a {ROLE_LABELS[user.role]?.toLowerCase() ?? 'member'}.</p>
       </section>
 
       {user.is_demo && (
-        <div role="note" className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <div role="note" className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-base text-amber-900">
           <strong className="font-semibold">You are using a demo account.</strong> Everything shown is sample data, and
           demo accounts cannot access real user information. Please don’t enter personal details.
         </div>
@@ -69,7 +69,7 @@ export default function MyDashboard() {
       <div className="grid gap-6 lg:grid-cols-3">
         <section aria-labelledby="profile-heading" className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 id="profile-heading" className="text-lg font-semibold text-slate-900">Your account</h2>
-          <dl className="mt-4 space-y-3 text-sm">
+          <dl className="mt-4 space-y-3 text-base">
             <div>
               <dt className="text-slate-500">Name</dt>
               <dd className="font-medium text-slate-900">{user.name}</dd>
@@ -100,7 +100,7 @@ export default function MyDashboard() {
             {portal.data && (
               <>
                 <p className="text-slate-700">{portal.data.message}</p>
-                <p className="mt-4 text-sm text-slate-500">
+                <p className="mt-4 text-base text-slate-500">
                   Access to this area was verified by the server for your role.
                 </p>
               </>

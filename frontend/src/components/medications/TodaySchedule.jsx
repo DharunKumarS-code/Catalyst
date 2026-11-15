@@ -13,7 +13,7 @@ import DoseStatusBadge from './DoseStatusBadge'
  * The status the user saw is sent as `expected_status`, so a double tap or a stale
  * screen can never record a dose twice.
  */
-export default function TodaySchedule({ schedule, canModify = false, onChanged, emptyText }) {
+export default function TodaySchedule({ schedule, canModify = false, profileId, onChanged, emptyText }) {
   const [busyId, setBusyId] = useState(null)
   const [message, setMessage] = useState(null)
 
@@ -22,7 +22,7 @@ export default function TodaySchedule({ schedule, canModify = false, onChanged, 
     setBusyId(dose.id)
     setMessage(null)
     try {
-      const updated = await setDoseStatus(dose.id, status, dose.status)
+      const updated = await setDoseStatus(dose.id, status, dose.status, { profileId })
       setMessage({
         variant: 'success',
         text: `${updated.medication_name} at ${formatClockTime(updated.local_time)} recorded as ${updated.status}.`,
@@ -62,6 +62,11 @@ export default function TodaySchedule({ schedule, canModify = false, onChanged, 
               <div className="min-w-0 flex-1">
                 <p className="break-words text-xl font-semibold text-slate-900">{dose.medication_name}</p>
                 <p className="text-lg text-slate-600">{dose.dosage}</p>
+                {dose.recorded_by_role && dose.recorded_by_role !== 'elderly' && dose.recorded_by_name && (
+                  <p className="text-base text-slate-700" data-testid="recorded-by">
+                    Recorded by {dose.recorded_by_name} ({dose.recorded_by_role === 'caretaker' ? 'caretaker' : 'family member'})
+                  </p>
+                )}
               </div>
               <DoseStatusBadge dose={dose} />
               {canModify && (dose.can_mark_taken || dose.can_mark_missed) && (

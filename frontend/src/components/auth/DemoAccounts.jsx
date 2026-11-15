@@ -30,7 +30,7 @@ export default function DemoAccounts({ onSelect }) {
         <h2 id="demo-accounts-heading" className="text-base font-semibold text-slate-900">Demo accounts</h2>
         <DemoBadge />
       </div>
-      <p className="mt-1 text-sm text-slate-600">
+      <p className="mt-1 text-base text-slate-600">
         Shared accounts for trying ElderCare Connect. They contain sample data only and cannot access real user data.
       </p>
       <ul className="mt-4 flex flex-col gap-3">
@@ -41,7 +41,7 @@ export default function DemoAccounts({ onSelect }) {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h3 className="font-medium text-slate-900">{label}</h3>
-                  <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-2 text-sm">
+                  <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-2 text-base">
                     <dt className="text-slate-500">Email</dt>
                     <dd className="break-all font-mono text-slate-800">{account.email}</dd>
                     <dt className="text-slate-500">Password</dt>
@@ -52,7 +52,7 @@ export default function DemoAccounts({ onSelect }) {
                   type="button"
                   onClick={() => onSelect({ email: account.email, password: account.password, label })}
                   aria-label={`Use ${label} demo account`}
-                  className="shrink-0 rounded-lg border border-teal-700 bg-white px-3 py-2 text-sm font-medium text-teal-800 transition-colors hover:bg-teal-50"
+                  className="min-h-12 shrink-0 rounded-lg border border-teal-700 bg-white px-4 py-2 text-base font-medium text-teal-800 transition-colors hover:bg-teal-50"
                 >
                   Use Demo Account
                 </button>

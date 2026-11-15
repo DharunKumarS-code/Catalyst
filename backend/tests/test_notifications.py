@@ -1,6 +1,6 @@
 """Notification generation, delivery, history and preferences (frozen clock, fake SMTP)."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -13,7 +13,7 @@ from app.services.email import DeliveryError
 from app.services.notifications import NotificationEngine
 from tests.helpers import create_profile, invite, new_user, redeem
 
-UTC = timezone.utc
+UTC = UTC
 T0 = datetime(2026, 11, 16, 12, 0, tzinfo=UTC)
 ONCE = {"name": "Metformin", "dosage": "500 mg", "frequency": "once_daily", "start_date": "2026-11-16"}
 
@@ -80,15 +80,18 @@ def test_medication_reminder_timing_timezone_and_content(client, clock, smtp):
     assert to == owner["user"]["email"] and "08:00" in subject
     assert "America/New York" in body and "Metformin" not in body + subject  # no medical detail in email
     doc = notes()[0]
-    assert doc["kind"] == "medication_reminder" and doc["status"] == "sent" and doc["related_label"] == "Metformin 500 mg"
+    assert (
+        doc["kind"] == "medication_reminder" and doc["status"] == "sent" and doc["related_label"] == "Metformin 500 mg"
+    )
 
 
 def test_reminder_preferences_respected(client, clock, smtp):
     owner = elderly(client)
     client.post("/api/medications", json={**ONCE, "times": ["12:50"]}, headers=owner["headers"])
     prefs = client.get("/api/notifications/preferences", headers=owner["headers"]).json()
-    client.put("/api/notifications/preferences", json={**prefs, "medication_reminder_minutes": 60},
-               headers=owner["headers"])
+    client.put(
+        "/api/notifications/preferences", json={**prefs, "medication_reminder_minutes": 60}, headers=owner["headers"]
+    )
     assert engine(smtp, FakeSender()).run_cycle(T0).created == 1  # 50 min before, within 60
     client.put("/api/notifications/preferences", json={**prefs, "email_enabled": False}, headers=owner["headers"])
     client.post("/api/medications", json={**ONCE, "name": "Aspirin", "times": ["12:55"]}, headers=owner["headers"])
@@ -101,7 +104,11 @@ def test_reminder_preferences_respected(client, clock, smtp):
 def test_missed_dose_escalation_without_changing_status(client, clock, smtp):
     owner = elderly(client)
     client.post("/api/medications", json={**ONCE, "times": ["10:30"]}, headers=owner["headers"])  # 90 min ago
-    carer, family, stranger = new_user(client, "caretaker"), new_user(client, "family_member"), new_user(client, "caretaker")
+    carer, family, stranger = (
+        new_user(client, "caretaker"),
+        new_user(client, "family_member"),
+        new_user(client, "caretaker"),
+    )
     assert redeem(client, carer, invite(client, owner, "caretaker")["code"]).status_code == 201
     assert redeem(client, family, invite(client, owner, "family_member")["code"]).status_code == 201
     prefs = client.get("/api/notifications/preferences", headers=family["headers"]).json()
@@ -148,22 +155,43 @@ def test_revocation_and_recording_before_delivery_skip_sending(client, clock, sm
 def test_appointment_reminders(client, clock, smtp):
     owner = elderly(client, timezone="Asia/Kolkata")
     appt = {"doctor_name": "Dr. Shah", "clinic_name": "Heart Clinic", "appointment_time": "10:30"}
-    soon = client.post("/api/appointments", json={**appt, "appointment_date": "2026-11-17"}, headers=owner["headers"]).json()
-    far = client.post("/api/appointments", json={**appt, "appointment_date": "2026-11-25"}, headers=owner["headers"]).json()
-    cancelled = client.post("/api/appointments", json={**appt, "appointment_date": "2026-11-17", "appointment_time": "11:00"},
-                            headers=owner["headers"]).json()
+    soon = client.post(
+        "/api/appointments", json={**appt, "appointment_date": "2026-11-17"}, headers=owner["headers"]
+    ).json()
+    far = client.post(
+        "/api/appointments", json={**appt, "appointment_date": "2026-11-25"}, headers=owner["headers"]
+    ).json()
+    cancelled = client.post(
+        "/api/appointments",
+        json={**appt, "appointment_date": "2026-11-17", "appointment_time": "11:00"},
+        headers=owner["headers"],
+    ).json()
     client.post(f"/api/appointments/{cancelled['id']}/cancel", headers=owner["headers"])
     sender = FakeSender()
     assert engine(smtp, sender).run_cycle(T0).created == 1  # default 24h; 10:30 IST = 05:00Z on the 17th
     doc = notes(kind="appointment_reminder")[0]
-    assert doc["related_id"] == mongodb.db["appointments"].find_one({"doctor_name": "Dr. Shah", "appointment_date": "2026-11-17", "appointment_time": "10:30"})["_id"]
-    assert "Asia/Kolkata" in sender.sent[0][2] and "Heart Clinic" in sender.sent[0][2] and "Dr. Shah" not in sender.sent[0][2]
+    assert (
+        doc["related_id"]
+        == mongodb.db["appointments"].find_one(
+            {"doctor_name": "Dr. Shah", "appointment_date": "2026-11-17", "appointment_time": "10:30"}
+        )["_id"]
+    )
+    assert (
+        "Asia/Kolkata" in sender.sent[0][2]
+        and "Heart Clinic" in sender.sent[0][2]
+        and "Dr. Shah" not in sender.sent[0][2]
+    )
     assert far["id"] and soon["id"]
 
 
 def test_rescheduled_appointment_gets_new_reminder_old_one_skipped(client, clock, smtp):
     owner = elderly(client)
-    body = {"doctor_name": "Dr. Lee", "clinic_name": "Eye Clinic", "appointment_date": "2026-11-17", "appointment_time": "09:00"}
+    body = {
+        "doctor_name": "Dr. Lee",
+        "clinic_name": "Eye Clinic",
+        "appointment_date": "2026-11-17",
+        "appointment_time": "09:00",
+    }
     a = client.post("/api/appointments", json=body, headers=owner["headers"]).json()
     assert engine(smtp, None).generate(T0) == 1
     client.put(f"/api/appointments/{a['id']}", json={**body, "appointment_time": "10:00"}, headers=owner["headers"])
@@ -235,7 +263,9 @@ def test_history_access(client, clock, smtp):
     assert sorted((n["recipient_role"], n["recipient_is_you"]) for n in mine) == [("caretaker", False), ("self", True)]
     assert all("recipient_email" not in n and "body" not in n for n in mine)
     theirs = client.get("/api/notifications", headers=carer["headers"]).json()
-    assert [(n["recipient_role"], n["about_name"], n["status"]) for n in theirs] == [("caretaker", "Margaret Smith", "sent")]
+    assert [(n["recipient_role"], n["about_name"], n["status"]) for n in theirs] == [
+        ("caretaker", "Margaret Smith", "sent")
+    ]
     assert client.get("/api/notifications", headers=other["headers"]).json() == []
     assert client.get("/api/notifications").status_code == 401
 
@@ -246,8 +276,10 @@ def test_preferences_validation_and_ownership(client, clock):
     defaults = client.get("/api/notifications/preferences", headers=owner["headers"]).json()
     assert defaults["medication_reminder_minutes"] == 15 and defaults["appointment_reminder_minutes"] == 1440
     for bad in ({"medication_reminder_minutes": 1}, {"appointment_reminder_minutes": 99999}, {"user_id": "x"}):
-        assert client.put("/api/notifications/preferences", json={**defaults, **bad},
-                          headers=owner["headers"]).status_code == 422
+        assert (
+            client.put("/api/notifications/preferences", json={**defaults, **bad}, headers=owner["headers"]).status_code
+            == 422
+        )
     client.put("/api/notifications/preferences", json={**defaults, "email_enabled": False}, headers=carer["headers"])
     assert client.get("/api/notifications/preferences", headers=owner["headers"]).json()["email_enabled"] is True
 
@@ -256,8 +288,14 @@ def test_status_and_test_message(client, clock):
     owner = elderly(client)
     st = client.get("/api/notifications/status", headers=owner["headers"]).json()
     assert st["delivery"] == "preview" and st["smtp_configured"] is False
-    assert set(st) == {"delivery", "smtp_configured", "scheduler_running", "check_interval_seconds",
-                       "missed_dose_grace_minutes", "last_check_at"}
+    assert set(st) == {
+        "delivery",
+        "smtp_configured",
+        "scheduler_running",
+        "check_interval_seconds",
+        "missed_dose_grace_minutes",
+        "last_check_at",
+    }
     res = client.post("/api/notifications/test", headers=owner["headers"])
     assert res.status_code == 202 and res.json()["kind"] == "test"
     history = client.get("/api/notifications", headers=owner["headers"]).json()
@@ -276,7 +314,44 @@ def test_demo_isolation_never_emails(client, clock, smtp):
     demo_docs = notes(is_demo=True)
     assert demo_docs and all(n["status"] == "preview" for n in demo_docs)
     assert all(s[0] == real["user"]["email"] for s in sender.sent)  # only the real user was emailed
-    token = client.post("/api/auth/login", json={"email": "caretaker.demo@eldercare.com", "password": "CareDemo2026!"}).json()["access_token"]
+    token = client.post(
+        "/api/auth/login", json={"email": "caretaker.demo@eldercare.com", "password": "CareDemo2026!"}
+    ).json()["access_token"]
     demo_hist = client.get("/api/notifications", headers={"Authorization": f"Bearer {token}"}).json()
     assert demo_hist and all(n["about_name"] == "Demo Elderly User" for n in demo_hist)
-    assert all(n["about_name"] != "Demo Elderly User" for n in client.get("/api/notifications", headers=real["headers"]).json())
+    assert all(
+        n["about_name"] != "Demo Elderly User" for n in client.get("/api/notifications", headers=real["headers"]).json()
+    )
+
+
+def test_final_delivery_drops_address_and_body_and_history_has_retention(client, auth_settings):
+    """Data minimisation: the email address and body are only kept while a send may be retried,
+    and notification history expires via a TTL index."""
+    from pymongo import MongoClient
+
+    from tests.conftest import TEST_MONGODB_URI
+
+    user = new_user(client, "elderly")
+    assert client.post("/api/notifications/test", headers=user["headers"]).status_code == 202
+    db = MongoClient(TEST_MONGODB_URI)[auth_settings.mongodb_db_name]
+    doc = db.notifications.find_one({"kind": "test"})
+    assert doc["status"] == "preview"
+    assert "recipient_email" not in doc and "body" not in doc
+    ttl = {i["name"]: i for i in db.notifications.list_indexes()}["notifications_retention"]
+    assert ttl["expireAfterSeconds"] == auth_settings.notification_retention_days * 24 * 3600
+
+
+def test_unread_count_and_mark_seen(client, auth_settings):
+    user = new_user(client, "elderly")
+    other = new_user(client, "elderly")
+    h = user["headers"]
+    assert client.get("/api/notifications/unread-count", headers=h).json() == {"unread": 0, "seen_at": None}
+    assert client.post("/api/notifications/test", headers=h).status_code == 202
+    assert client.get("/api/notifications/unread-count", headers=h).json()["unread"] == 1
+    # Scoped to the caller: someone else's notifications are never counted.
+    assert client.get("/api/notifications/unread-count", headers=other["headers"]).json()["unread"] == 0
+
+    assert client.post("/api/notifications/seen", headers=h).status_code == 204
+    body = client.get("/api/notifications/unread-count", headers=h).json()
+    assert body["unread"] == 0 and body["seen_at"] is not None
+    assert client.get("/api/notifications/unread-count").status_code == 401

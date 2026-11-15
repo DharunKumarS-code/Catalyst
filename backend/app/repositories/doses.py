@@ -11,6 +11,8 @@ from pymongo.errors import BulkWriteError
 from app.db.indexes import DOSES_COLLECTION
 
 DUPLICATE_KEY = 11000
+# The status `history` is an audit trail that no API response uses: never load it for reads.
+WITHOUT_HISTORY = {"history": 0}
 
 
 def eligible_filter(now: datetime) -> dict:
@@ -47,13 +49,13 @@ class DoseRepository:
             return exc.details.get("nUpserted", 0)
 
     def get(self, dose_id: ObjectId, user_id: ObjectId) -> dict | None:
-        return self._doses.find_one({"_id": dose_id, "user_id": user_id})
+        return self._doses.find_one({"_id": dose_id, "user_id": user_id}, WITHOUT_HISTORY)
 
     def for_day(self, user_id: ObjectId, local_date: str) -> list[dict]:
         return list(
-            self._doses.find({"user_id": user_id, "local_date": local_date, "status": {"$ne": "cancelled"}}).sort(
-                "scheduled_at", 1
-            )
+            self._doses.find(
+                {"user_id": user_id, "local_date": local_date, "status": {"$ne": "cancelled"}}, WITHOUT_HISTORY
+            ).sort("scheduled_at", 1)
         )
 
     def history(
@@ -63,7 +65,7 @@ class DoseRepository:
         query: dict = {"user_id": user_id, "scheduled_at": {"$gte": since}, **eligible_filter(until)}
         if medication_id is not None:
             query["medication_id"] = medication_id
-        return list(self._doses.find(query).sort("scheduled_at", -1).limit(limit))
+        return list(self._doses.find(query, WITHOUT_HISTORY).sort("scheduled_at", -1).limit(limit))
 
     def counts_by_day(
         self, user_id: ObjectId, local_dates: list[str], now: datetime, medication_id: ObjectId | None = None
@@ -91,8 +93,10 @@ class DoseRepository:
         match = {"$and": [{"$or": [{"user_id": u, "local_date": d} for u, d in owner_days]}, eligible_filter(now)]}
         out: dict[tuple[ObjectId, str], dict[str, int]] = {}
         for row in self._doses.aggregate(
-            [{"$match": match},
-             {"$group": {"_id": {"u": "$user_id", "d": "$local_date", "s": "$status"}, "n": {"$sum": 1}}}]
+            [
+                {"$match": match},
+                {"$group": {"_id": {"u": "$user_id", "d": "$local_date", "s": "$status"}, "n": {"$sum": 1}}},
+            ]
         ):
             out.setdefault((row["_id"]["u"], row["_id"]["d"]), {})[row["_id"]["s"]] = row["n"]
         return out
@@ -101,24 +105,45 @@ class DoseRepository:
         if not owner_days:
             return []
         query = {"$or": [{"user_id": u, "local_date": d} for u, d in owner_days], "status": {"$ne": "cancelled"}}
-        return list(self._doses.find(query, {"history": 0}).sort("scheduled_at", 1))
+        return list(self._doses.find(query, WITHOUT_HISTORY).sort("scheduled_at", 1))
 
     def recently_recorded(self, user_ids: list[ObjectId], since: datetime, limit: int) -> list[dict]:
         """Doses actually recorded (taken/missed) by their owner since `since`, newest first."""
-        query = {"user_id": {"$in": user_ids}, "status": {"$in": ["taken", "missed"]}, "status_changed_at": {"$gte": since}}
-        return list(self._doses.find(query, {"history": 0}).sort("status_changed_at", -1).limit(limit))
+        query = {
+            "user_id": {"$in": user_ids},
+            "status": {"$in": ["taken", "missed"]},
+            "status_changed_at": {"$gte": since},
+        }
+        return list(self._doses.find(query, WITHOUT_HISTORY).sort("status_changed_at", -1).limit(limit))
 
     def transition(
-        self, dose_id: ObjectId, user_id: ObjectId, *, expected: str, new: str, now: datetime, by: ObjectId
+        self,
+        dose_id: ObjectId,
+        user_id: ObjectId,
+        *,
+        expected: str,
+        new: str,
+        now: datetime,
+        by: ObjectId,
+        by_name: str | None = None,
+        by_role: str = "elderly",
     ) -> dict | None:
         """Atomic compare-and-set: applies only if the dose still has the status the client saw.
         A repeated or stale request matches nothing and changes nothing."""
         return self._doses.find_one_and_update(
             {"_id": dose_id, "user_id": user_id, "status": expected},
             {
-                "$set": {"status": new, "status_changed_at": now, "taken_at": now if new == "taken" else None},
-                "$push": {"history": {"from": expected, "to": new, "at": now, "by": by}},
+                "$set": {
+                    "status": new,
+                    "status_changed_at": now,
+                    "taken_at": now if new == "taken" else None,
+                    "status_changed_by": by,
+                    "status_changed_by_name": by_name,
+                    "status_changed_by_role": by_role,
+                },
+                "$push": {"history": {"from": expected, "to": new, "at": now, "by": by, "by_role": by_role}},
             },
+            projection=WITHOUT_HISTORY,
             return_document=ReturnDocument.AFTER,
         )
 
@@ -152,3 +177,16 @@ class DoseRepository:
 
     def delete_for_medication(self, medication_id: ObjectId) -> int:
         return self._doses.delete_many({"medication_id": medication_id}).deleted_count
+
+    # ---- reminder engine ----
+
+    def pending_between(self, start: datetime, end: datetime, *, include_start: bool) -> list[dict]:
+        """Unrecorded doses scheduled in (start, end] or [start, end], across all owners."""
+        lower = "$gte" if include_start else "$gt"
+        return list(
+            self._doses.find({"status": "pending", "scheduled_at": {lower: start, "$lte": end}}, WITHOUT_HISTORY)
+        )
+
+    def status_of(self, dose_id: ObjectId) -> str | None:
+        doc = self._doses.find_one({"_id": dose_id}, {"status": 1})
+        return doc["status"] if doc else None

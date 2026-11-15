@@ -3,6 +3,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Annotated
 
+from bson import ObjectId
 from pydantic import AfterValidator, BaseModel, ConfigDict, EmailStr, Field, StringConstraints, field_validator
 
 PASSWORD_MIN_LENGTH = 12
@@ -81,6 +82,11 @@ class UserPublic(BaseModel):
     role: Role
     is_demo: bool = False
     created_at: datetime
+
+    @property
+    def oid(self) -> ObjectId:
+        """The id as an ObjectId. Always valid: it was read from the database."""
+        return ObjectId(self.id)
 
     @classmethod
     def from_document(cls, doc: dict) -> "UserPublic":

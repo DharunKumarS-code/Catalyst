@@ -11,8 +11,8 @@ import sys
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.db.mongodb import mongodb
-from app.demo.sample_data import provision_demo_sample_data
 from app.demo.provisioning import demo_disabled_reason, provision_demo_accounts
+from app.demo.sample_data import provision_demo_sample_data
 from app.repositories.users import UserRepository
 
 

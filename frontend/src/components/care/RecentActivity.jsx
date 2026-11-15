@@ -33,7 +33,7 @@ export default function RecentActivity({ items }) {
             </span>
             <span>
               <span className="block text-lg text-slate-900">{kind.text(item)}</span>
-              <span className="block text-sm text-slate-500">Recorded {formatDateTime(item.at)}</span>
+              <span className="block text-base text-slate-500">Recorded {formatDateTime(item.at)}</span>
             </span>
           </li>
         )

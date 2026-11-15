@@ -46,8 +46,15 @@ def stub(monkeypatch):
 
 
 def settings(**over):
-    return Settings(_env_file=None, email_mode="smtp", smtp_host="smtp.example.test", smtp_from="noreply@example.test",
-                    smtp_username="user", smtp_password="s3cret-pass", **over)
+    return Settings(
+        _env_file=None,
+        email_mode="smtp",
+        smtp_host="smtp.example.test",
+        smtp_from="noreply@example.test",
+        smtp_username="user",
+        smtp_password="s3cret-pass",
+        **over,
+    )
 
 
 def test_settings_flags():
@@ -63,12 +70,15 @@ def test_send_uses_starttls_and_login(stub):
     assert calls[2] == ("send", "a@example.org", "Hi", "noreply@example.test")
 
 
-@pytest.mark.parametrize("error, message", [
-    (smtplib.SMTPAuthenticationError(535, b"bad"), "The mail server rejected the login."),
-    (smtplib.SMTPRecipientsRefused({"a@example.org": (550, b"no")}), "The recipient address was rejected."),
-    (smtplib.SMTPDataError(554, b"x"), "Mail server error (SMTPDataError)."),
-    (ConnectionRefusedError(), "Could not connect to the mail server."),
-])
+@pytest.mark.parametrize(
+    "error, message",
+    [
+        (smtplib.SMTPAuthenticationError(535, b"bad"), "The mail server rejected the login."),
+        (smtplib.SMTPRecipientsRefused({"a@example.org": (550, b"no")}), "The recipient address was rejected."),
+        (smtplib.SMTPDataError(554, b"x"), "Mail server error (SMTPDataError)."),
+        (ConnectionRefusedError(), "Could not connect to the mail server."),
+    ],
+)
 def test_failures_become_safe_messages(stub, error, message):
     stub.fail = error
     with pytest.raises(DeliveryError) as exc:

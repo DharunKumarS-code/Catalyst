@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 DEFAULT_TIMEZONE = "UTC"
@@ -7,7 +7,7 @@ DEFAULT_TIMEZONE = "UTC"
 def utc_now() -> datetime:
     """Current UTC time truncated to milliseconds, MongoDB's storage precision, so values
     returned right after a write equal the values read back later."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return now.replace(microsecond=now.microsecond // 1000 * 1000)
 
 

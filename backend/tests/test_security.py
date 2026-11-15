@@ -1,6 +1,6 @@
 """Unit tests for password hashing and JWT handling (no database needed)."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import jwt
 import pytest
@@ -24,7 +24,7 @@ def settings() -> Settings:
 
 
 def _encode(settings: Settings, **overrides) -> str:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload = {
         "sub": "507f1f77bcf86cd799439011",
         "role": "elderly",
@@ -40,6 +40,7 @@ def _encode(settings: Settings, **overrides) -> str:
 
 
 # ---- Password hashing ----
+
 
 def test_hash_is_argon2id_and_not_plaintext():
     h = hash_password("CorrectHorse9Battery")
@@ -68,6 +69,7 @@ def test_fresh_hash_does_not_need_rehash():
 
 # ---- JWT ----
 
+
 def test_token_roundtrip(settings):
     token, expires_in = create_access_token("abc123", "caretaker", settings)
     payload = decode_access_token(token, settings)
@@ -77,7 +79,7 @@ def test_token_roundtrip(settings):
 
 
 def test_expired_token_rejected(settings):
-    past = datetime.now(timezone.utc) - timedelta(minutes=10)
+    past = datetime.now(UTC) - timedelta(minutes=10)
     token = _encode(settings, iat=past - timedelta(minutes=5), exp=past)
     with pytest.raises(TokenError) as info:
         decode_access_token(token, settings)

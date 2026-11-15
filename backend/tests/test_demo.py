@@ -67,6 +67,7 @@ def bearer(token):
 
 # ---- Configuration ----
 
+
 def test_demo_disabled_by_default():
     s = Settings(_env_file=None)
     assert s.demo_accounts_enabled is False and s.demo_accounts_active is False
@@ -75,8 +76,9 @@ def test_demo_disabled_by_default():
 def test_production_requires_explicit_opt_in():
     prod = Settings(_env_file=None, environment="production", demo_accounts_enabled=True)
     assert prod.demo_accounts_active is False
-    prod_ok = Settings(_env_file=None, environment="production", demo_accounts_enabled=True,
-                       demo_accounts_allow_production=True)
+    prod_ok = Settings(
+        _env_file=None, environment="production", demo_accounts_enabled=True, demo_accounts_allow_production=True
+    )
     assert prod_ok.demo_accounts_active is True
 
 
@@ -85,6 +87,7 @@ def test_definitions_match_requested_credentials():
 
 
 # ---- Provisioning ----
+
 
 def test_provisioning_refused_when_disabled(client, auth_settings):
     with pytest.raises(DemoProvisioningDisabledError):
@@ -122,8 +125,9 @@ def test_existing_non_demo_account_is_left_untouched(demo_client, auth_settings)
     from app.core.security import hash_password
 
     original = hash_password("SomeoneElse123")
-    users_repo().create(name="Real Person", email="elderly.demo@eldercare.com",
-                        password_hash=original, role=Role.CARETAKER)
+    users_repo().create(
+        name="Real Person", email="elderly.demo@eldercare.com", password_hash=original, role=Role.CARETAKER
+    )
     results = seed(auth_settings)
     assert results["elderly.demo@eldercare.com"] == ProvisionStatus.CONFLICT
     doc = mongodb.db[USERS_COLLECTION].find_one({"email": "elderly.demo@eldercare.com"})
@@ -131,13 +135,20 @@ def test_existing_non_demo_account_is_left_untouched(demo_client, auth_settings)
 
 
 def test_demo_emails_cannot_be_registered_publicly(client):
-    res = client.post("/api/auth/register", json={
-        "name": "Squatter", "email": "Caretaker.Demo@eldercare.com", "password": "MyOwnPassword123", "role": "caretaker",
-    })
+    res = client.post(
+        "/api/auth/register",
+        json={
+            "name": "Squatter",
+            "email": "Caretaker.Demo@eldercare.com",
+            "password": "MyOwnPassword123",
+            "role": "caretaker",
+        },
+    )
     assert res.status_code == 409
 
 
 # ---- Logins and permissions ----
+
 
 @pytest.mark.parametrize("role", list(CREDENTIALS))
 def test_demo_login_and_role_permissions(demo_client, auth_settings, role):
@@ -169,9 +180,15 @@ def test_demo_accounts_blocked_from_real_data(demo_client, auth_settings, role):
 
 
 def test_real_users_can_access_real_data(demo_client):
-    res = demo_client.post("/api/auth/register", json={
-        "name": "Real Carer", "email": "carer@example.org", "password": "RealPassword123", "role": "caretaker",
-    })
+    res = demo_client.post(
+        "/api/auth/register",
+        json={
+            "name": "Real Carer",
+            "email": "carer@example.org",
+            "password": "RealPassword123",
+            "role": "caretaker",
+        },
+    )
     token = res.json()["access_token"]
     assert res.json()["user"]["is_demo"] is False
     assert demo_client.get("/api/_test/real-data", headers=bearer(token)).status_code == 200
@@ -193,6 +210,7 @@ def test_wrong_password_for_demo_account_rejected(demo_client, auth_settings):
 
 
 # ---- Public demo-accounts listing ----
+
 
 def test_listing_hidden_when_disabled(client):
     assert client.get("/api/auth/demo-accounts").status_code == 404

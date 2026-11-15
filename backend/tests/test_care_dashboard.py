@@ -1,6 +1,6 @@
 """Care dashboard (caretaker / family monitoring) tests. Frozen clock, throwaway MongoDB."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -10,12 +10,21 @@ from app.demo.sample_data import provision_demo_sample_data
 from app.repositories.users import UserRepository
 from tests.helpers import create_profile, invite, new_user, redeem
 
-UTC = timezone.utc
+UTC = UTC
 T0 = datetime(2026, 11, 16, 12, 0, tzinfo=UTC)
-MED = {"name": "Metformin", "dosage": "500 mg", "frequency": "twice_daily", "times": ["08:00", "20:00"],
-       "start_date": "2026-11-16"}
-APPT = {"doctor_name": "Dr. Shah", "clinic_name": "Heart Clinic", "appointment_date": "2026-11-20",
-        "appointment_time": "10:30"}
+MED = {
+    "name": "Metformin",
+    "dosage": "500 mg",
+    "frequency": "twice_daily",
+    "times": ["08:00", "20:00"],
+    "start_date": "2026-11-16",
+}
+APPT = {
+    "doctor_name": "Dr. Shah",
+    "clinic_name": "Heart Clinic",
+    "appointment_date": "2026-11-20",
+    "appointment_time": "10:30",
+}
 
 
 class Clock:
@@ -80,20 +89,32 @@ def test_medication_overview_and_adherence_consistency(client, clock):
     family = new_user(client, "family_member")
     link(client, owner, family, "family_member")
     client.post("/api/medications", json=MED, headers=owner["headers"])
-    client.post("/api/medications", json={**MED, "name": "Aspirin", "frequency": "once_daily", "times": ["09:00"]},
-                headers=owner["headers"])
+    client.post(
+        "/api/medications",
+        json={**MED, "name": "Aspirin", "frequency": "once_daily", "times": ["09:00"]},
+        headers=owner["headers"],
+    )
     doses = client.get("/api/doses/today", headers=owner["headers"]).json()["doses"]
     met_morning = next(d for d in doses if d["medication_name"] == "Metformin" and d["local_time"] == "08:00")
-    client.patch(f"/api/doses/{met_morning['id']}/status", json={"status": "taken", "expected_status": "pending"},
-                 headers=owner["headers"])
+    client.patch(
+        f"/api/doses/{met_morning['id']}/status",
+        json={"status": "taken", "expected_status": "pending"},
+        headers=owner["headers"],
+    )
     aspirin = next(d for d in doses if d["medication_name"] == "Aspirin")
-    client.patch(f"/api/doses/{aspirin['id']}/status", json={"status": "missed", "expected_status": "pending"},
-                 headers=owner["headers"])
+    client.patch(
+        f"/api/doses/{aspirin['id']}/status",
+        json={"status": "missed", "expected_status": "pending"},
+        headers=owner["headers"],
+    )
 
     p = dashboard(client, family)["profiles"][0]
     assert p["active_medications"] == 2
     assert [(d["local_time"], d["status"]) for d in p["today_doses"]] == [
-        ("08:00", "taken"), ("09:00", "missed"), ("20:00", "pending")]
+        ("08:00", "taken"),
+        ("09:00", "missed"),
+        ("20:00", "pending"),
+    ]
     assert not any(d["can_mark_taken"] or d["can_mark_missed"] for d in p["today_doses"])  # read-only
     assert p["next_dose"]["local_time"] == "20:00"
     assert (p["today"]["total"], p["today"]["taken"], p["today"]["missed"], p["today"]["pending"]) == (2, 1, 1, 0)
@@ -101,13 +122,16 @@ def test_medication_overview_and_adherence_consistency(client, clock):
 
     # Same numbers as the existing adherence endpoints (one rule, not a second calculation).
     owner_today = client.get("/api/adherence", headers=owner["headers"]).json()["today"]
-    member_today = client.get(f"/api/linked-profiles/{owner['profile']['id']}/adherence",
-                              headers=family["headers"]).json()["today"]
+    member_today = client.get(
+        f"/api/linked-profiles/{owner['profile']['id']}/adherence", headers=family["headers"]
+    ).json()["today"]
     assert p["today"] == owner_today == member_today
 
     activity = p["recent_activity"]
-    assert {(i["kind"], i["subject"]) for i in activity} == {("dose_taken", "Metformin 500 mg"),
-                                                           ("dose_missed", "Aspirin 500 mg")}
+    assert {(i["kind"], i["subject"]) for i in activity} == {
+        ("dose_taken", "Metformin 500 mg"),
+        ("dose_missed", "Aspirin 500 mg"),
+    }
 
 
 def test_no_doses_means_no_percentage(client, clock):
@@ -126,8 +150,9 @@ def test_appointment_overview(client, clock):
     link(client, owner, carer, "caretaker")
     for day in ("2026-11-25", "2026-11-18", "2026-11-30", "2026-12-05"):
         client.post("/api/appointments", json={**APPT, "appointment_date": day}, headers=owner["headers"])
-    cancelled = client.post("/api/appointments", json={**APPT, "appointment_date": "2026-11-17"},
-                            headers=owner["headers"]).json()
+    cancelled = client.post(
+        "/api/appointments", json={**APPT, "appointment_date": "2026-11-17"}, headers=owner["headers"]
+    ).json()
     client.post(f"/api/appointments/{cancelled['id']}/cancel", headers=owner["headers"])
 
     p = dashboard(client, carer)["profiles"][0]
@@ -161,7 +186,10 @@ def test_demo_isolation(client, auth_settings, clock):
 
     provision_demo_accounts(UserRepository(mongodb.db), auth_settings)
     provision_demo_sample_data(mongodb.db, horizon_days=7, early_minutes=120, now=clock.now)
-    for email, pw in (("caretaker.demo@eldercare.com", "CareDemo2026!"), ("family.demo@eldercare.com", "FamilyDemo2026!")):
+    for email, pw in (
+        ("caretaker.demo@eldercare.com", "CareDemo2026!"),
+        ("family.demo@eldercare.com", "FamilyDemo2026!"),
+    ):
         token = client.post("/api/auth/login", json={"email": email, "password": pw}).json()["access_token"]
         data = dashboard(client, {"headers": {"Authorization": f"Bearer {token}"}})
         assert [p["full_name"] for p in data["profiles"]] == ["Demo Elderly User"]

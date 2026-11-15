@@ -22,7 +22,7 @@ from app.repositories.medications import MedicationRepository
 from app.repositories.profiles import ProfileRepository
 from app.repositories.relationships import RelationshipRepository
 from app.schemas.user import Role, UserPublic
-from app.services.medications import MedicationService, Scope
+from app.services.medications import MedicationService, Scope, member_scope_for
 
 elderly_user = require_roles(Role.ELDERLY)
 member_user = require_roles(Role.CARETAKER, Role.FAMILY_MEMBER)
@@ -48,11 +48,11 @@ def owner_scope(
     user: UserPublic = Depends(elderly_user),
     profiles: ProfileRepository = Depends(get_profile_repository),
 ) -> Scope:
-    owner_id = to_object_id(user.id)
+    owner_id = user.oid
     profile = profiles.get_by_user(owner_id)
     if profile is None:
         raise HTTPException(status.HTTP_409_CONFLICT, PROFILE_REQUIRED)
-    return Scope(owner_id=owner_id, profile=profile, can_modify=True)
+    return Scope(owner_id=owner_id, profile=profile, can_modify=True, actor_id=owner_id, actor_name=user.name)
 
 
 def member_scope(
@@ -62,9 +62,9 @@ def member_scope(
     profiles: ProfileRepository = Depends(get_profile_repository),
 ) -> Scope:
     pid = to_object_id(profile_id)
-    rel = pid and relationships.get_active_for_member(pid, to_object_id(user.id), is_demo=user.is_demo)
+    rel = pid and relationships.get_active_for_member(pid, user.oid, is_demo=user.is_demo)
     profile = profiles.get_by_id(pid) if rel else None
     # Same 404 whether missing, never linked, revoked, or demo/real mismatch: no existence oracle.
     if not rel or profile is None or bool(profile.get("is_demo")) != user.is_demo:
         raise HTTPException(status.HTTP_404_NOT_FOUND, PROFILE_NOT_FOUND)
-    return Scope(owner_id=profile["user_id"], profile=profile, can_modify=False)
+    return member_scope_for(rel, profile, user.oid, user.name)

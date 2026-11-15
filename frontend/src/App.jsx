@@ -1,30 +1,33 @@
+import { lazy } from 'react'
 import { Route, Routes } from 'react-router-dom'
 import { ROLES } from './auth/roles'
 import ProtectedRoute from './components/auth/ProtectedRoute'
 import PublicOnlyRoute from './components/auth/PublicOnlyRoute'
 import Layout from './components/layout/Layout'
-import AppointmentDetail from './pages/AppointmentDetail'
-import AppointmentEditor from './pages/AppointmentEditor'
-import AppointmentsDashboard from './pages/AppointmentsDashboard'
-import CareDashboard from './pages/CareDashboard'
-import Connections from './pages/Connections'
 import Dashboard from './pages/Dashboard'
-import LinkedProfileDetail from './pages/LinkedProfileDetail'
-import LinkedAppointments from './pages/LinkedAppointments'
-import LinkedMedications from './pages/LinkedMedications'
-import LinkedProfiles from './pages/LinkedProfiles'
 import Login from './pages/Login'
-import MedicationDetail from './pages/MedicationDetail'
-import MedicationEditor from './pages/MedicationEditor'
-import MedicationHistory from './pages/MedicationHistory'
-import MedicationsDashboard from './pages/MedicationsDashboard'
-import MyDashboard from './pages/MyDashboard'
 import NotFound from './pages/NotFound'
-import NotificationsPage from './pages/NotificationsPage'
-import ProfileEditor from './pages/ProfileEditor'
-import ProfilePage from './pages/ProfilePage'
-import RedeemInvitation from './pages/RedeemInvitation'
 import Register from './pages/Register'
+
+// First-visit pages load with the app; signed-in pages are fetched on demand (route-level code splitting).
+const AppointmentDetail = lazy(() => import('./pages/AppointmentDetail'))
+const AppointmentEditor = lazy(() => import('./pages/AppointmentEditor'))
+const AppointmentsDashboard = lazy(() => import('./pages/AppointmentsDashboard'))
+const CareDashboard = lazy(() => import('./pages/CareDashboard'))
+const Connections = lazy(() => import('./pages/Connections'))
+const LinkedProfileDetail = lazy(() => import('./pages/LinkedProfileDetail'))
+const LinkedAppointments = lazy(() => import('./pages/LinkedAppointments'))
+const LinkedMedications = lazy(() => import('./pages/LinkedMedications'))
+const LinkedProfiles = lazy(() => import('./pages/LinkedProfiles'))
+const MedicationDetail = lazy(() => import('./pages/MedicationDetail'))
+const MedicationEditor = lazy(() => import('./pages/MedicationEditor'))
+const MedicationHistory = lazy(() => import('./pages/MedicationHistory'))
+const MedicationsDashboard = lazy(() => import('./pages/MedicationsDashboard'))
+const MyDashboard = lazy(() => import('./pages/MyDashboard'))
+const NotificationsPage = lazy(() => import('./pages/NotificationsPage'))
+const ProfileEditor = lazy(() => import('./pages/ProfileEditor'))
+const ProfilePage = lazy(() => import('./pages/ProfilePage'))
+const RedeemInvitation = lazy(() => import('./pages/RedeemInvitation'))
 
 const ELDERLY_ONLY = [ROLES.ELDERLY]
 const SUPPORTERS = [ROLES.CARETAKER, ROLES.FAMILY_MEMBER]

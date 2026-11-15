@@ -9,7 +9,8 @@ import PageHeader from '../components/ui/PageHeader'
 import PageLoader from '../components/ui/PageLoader'
 import { useResource } from '../hooks/useResource'
 
-/** /linked/:profileId/medications: read-only medication view for caretakers/family members. */
+/** /linked/:profileId/medications: medication view for caretakers/family members (read-only, except
+ *  doses a caretaker has been allowed to record). */
 export default function LinkedMedications() {
   const { profileId } = useParams()
   const loader = useCallback((signal) => getLinkedProfile(profileId, signal), [profileId])
@@ -36,7 +37,11 @@ export default function LinkedMedications() {
     <div className="mx-auto max-w-4xl">
       <PageHeader
         title={`${data.profile.full_name}'s medicines`}
-        description="You can view medicines and doses. Only they can record doses or change medicines."
+        description={
+          data.can_record_doses
+            ? 'You can record doses you give. Only they can change their medicines.'
+            : 'You can view medicines and doses. Only they can change medicines.'
+        }
         actions={
           <ButtonLink to={`/linked/${profileId}`} variant="secondary">
             Back to profile

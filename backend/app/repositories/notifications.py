@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from bson import ObjectId
 from pymongo import ReturnDocument
 from pymongo.database import Database
-from pymongo.errors import DuplicateKeyError
+from pymongo.errors import BulkWriteError, DuplicateKeyError
 
 from app.db.indexes import NOTIFICATION_PREFERENCES_COLLECTION, NOTIFICATIONS_COLLECTION
 from app.schemas.notification import NotificationPreferences
@@ -25,6 +25,24 @@ class NotificationRepository:
             return True
         except DuplicateKeyError:
             return False
+
+    def create_many_if_absent(self, docs: list[dict]) -> int:
+        """Insert the notifications whose dedupe_key does not exist yet; returns how many were new.
+        One batched lookup replaces one failing insert per already-queued notification every cycle.
+        The unique index remains the guard: a concurrent insert of the same key is simply skipped."""
+        if not docs:
+            return 0
+        keys = [d["dedupe_key"] for d in docs]
+        existing = {d["dedupe_key"] for d in self._n.find({"dedupe_key": {"$in": keys}}, {"dedupe_key": 1, "_id": 0})}
+        new = [d for d in docs if d["dedupe_key"] not in existing]
+        if not new:
+            return 0
+        try:
+            return len(self._n.insert_many(new, ordered=False).inserted_ids)
+        except BulkWriteError as exc:
+            if any(e.get("code") != 11000 for e in exc.details.get("writeErrors", [])):
+                raise
+            return exc.details.get("nInserted", 0)
 
     def get(self, notification_id: ObjectId) -> dict | None:
         return self._n.find_one({"_id": notification_id}, {"body": 0, "recipient_email": 0})
@@ -52,21 +70,40 @@ class NotificationRepository:
             return_document=ReturnDocument.AFTER,
         )
 
-    def finish(self, notification_id: ObjectId, changes: dict) -> None:
-        self._n.update_one({"_id": notification_id, "status": "sending"}, {"$set": changes})
+    def finish(self, notification_id: ObjectId, changes: dict, *, final: bool = False) -> None:
+        """Record a delivery outcome. A final outcome also drops the email address and body,
+        which are only needed for retries (data minimisation)."""
+        update: dict = {"$set": changes}
+        if final:
+            update["$unset"] = {"recipient_email": "", "body": ""}
+        self._n.update_one({"_id": notification_id, "status": "sending"}, update)
 
     def fail_exhausted(self, now: datetime) -> None:
         """Stale claims that already used every attempt become failed instead of stuck."""
         self._n.update_many(
             {"status": "sending", "claimed_until": {"$lte": now}, "attempts": {"$gte": MAX_ATTEMPTS}},
-            {"$set": {"status": "failed", "failure_reason": "Delivery was interrupted repeatedly."}},
+            {
+                "$set": {"status": "failed", "failure_reason": "Delivery was interrupted repeatedly."},
+                "$unset": {"recipient_email": "", "body": ""},
+            },
         )
 
-    def history(self, user_id: ObjectId, *, as_owner: bool, is_demo: bool, limit: int) -> list[dict]:
+    @staticmethod
+    def _visible_to(user_id: ObjectId, *, as_owner: bool, is_demo: bool) -> dict:
         """Owner: everything about them (any recipient). Others: only what they received."""
         field = "owner_user_id" if as_owner else "recipient_user_id"
-        query = {"$or": [{field: user_id}, {"recipient_user_id": user_id}], "is_demo": is_demo}
+        return {"$or": [{field: user_id}, {"recipient_user_id": user_id}], "is_demo": is_demo}
+
+    def history(self, user_id: ObjectId, *, as_owner: bool, is_demo: bool, limit: int) -> list[dict]:
+        query = self._visible_to(user_id, as_owner=as_owner, is_demo=is_demo)
         return list(self._n.find(query, {"body": 0, "recipient_email": 0}).sort("created_at", -1).limit(limit))
+
+    def count_since(self, user_id: ObjectId, *, as_owner: bool, is_demo: bool, since: datetime | None, cap: int) -> int:
+        """Unread count (capped, so a badge never scans a long history). Uses the owner/recipient indexes."""
+        query = self._visible_to(user_id, as_owner=as_owner, is_demo=is_demo)
+        if since is not None:
+            query["created_at"] = {"$gt": since}
+        return self._n.count_documents(query, limit=cap)
 
 
 class PreferenceRepository:

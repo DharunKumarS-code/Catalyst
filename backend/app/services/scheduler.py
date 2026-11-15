@@ -65,8 +65,11 @@ class NotificationScheduler:
         self._stop.clear()
         self._thread = threading.Thread(target=self._loop, args=(settings,), name="notifications", daemon=True)
         self._thread.start()
-        logger.info("Notification scheduler started (every %ss, delivery: %s).",
-                    settings.notification_interval_seconds, "email" if settings.email_delivery_active else "preview")
+        logger.info(
+            "Notification scheduler started (every %ss, delivery: %s).",
+            settings.notification_interval_seconds,
+            "email" if settings.email_delivery_active else "preview",
+        )
 
     def stop(self) -> None:
         self._stop.set()

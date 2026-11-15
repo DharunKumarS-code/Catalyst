@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { getApiErrorMessage } from '../../api/client'
-import { revokeConnection } from '../../api/linking'
+import { revokeConnection, setDosePermission } from '../../api/linking'
 import RoleBadge from '../auth/RoleBadge'
 import Alert from '../ui/Alert'
 import Button from '../ui/Button'
@@ -11,6 +11,25 @@ export default function ConnectionList({ connections, onChanged }) {
   const [confirmId, setConfirmId] = useState(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState(null)
+
+  async function handlePermission(connection, allowed) {
+    setBusy(true)
+    setMessage(null)
+    try {
+      await setDosePermission(connection.id, allowed)
+      setMessage({
+        variant: 'success',
+        text: allowed
+          ? `${connection.member.name} can now record doses they give you.`
+          : `${connection.member.name} can no longer record doses. They can still view them.`,
+      })
+      onChanged()
+    } catch (err) {
+      setMessage({ variant: 'error', text: getApiErrorMessage(err, 'We could not change this permission.') })
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function handleRevoke(connection) {
     setBusy(true)
@@ -30,7 +49,10 @@ export default function ConnectionList({ connections, onChanged }) {
   return (
     <section aria-labelledby="connections-heading" className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <h2 id="connections-heading" className="text-2xl font-semibold text-slate-900">People connected to you</h2>
-      <p className="mt-2 text-lg text-slate-600">These people can see your profile. You can remove access at any time.</p>
+      <p className="mt-2 text-lg text-slate-600">
+        These people can see your profile, medicines and appointments. Only you can change them. You can let a
+        caretaker record doses they give you, and remove anyone&rsquo;s access at any time.
+      </p>
       <div aria-live="polite" className="mt-3 empty:mt-0">
         {message && <Alert variant={message.variant}>{message.text}</Alert>}
       </div>
@@ -54,6 +76,24 @@ export default function ConnectionList({ connections, onChanged }) {
                   </Button>
                 )}
               </div>
+              {c.role === 'caretaker' && (
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-50 p-4">
+                  <p className="text-base text-slate-800" id={`perm-${c.id}`}>
+                    <strong>Recording doses:</strong>{' '}
+                    {c.can_record_doses
+                      ? `${c.member.name} can mark doses as taken or missed for you.`
+                      : `${c.member.name} can view your doses but not record them.`}
+                  </p>
+                  <Button
+                    variant="secondary"
+                    onClick={() => handlePermission(c, !c.can_record_doses)}
+                    disabled={busy}
+                    aria-describedby={`perm-${c.id}`}
+                  >
+                    {c.can_record_doses ? 'Stop allowing' : 'Allow recording doses'}
+                  </Button>
+                </div>
+              )}
               {confirmId === c.id && (
                 <div role="group" aria-label={`Confirm removing ${c.member.name}`} className="mt-4 rounded-xl bg-rose-50 p-4">
                   <p className="text-lg text-rose-900">

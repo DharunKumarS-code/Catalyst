@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -85,7 +85,8 @@ describe('demo accounts on the login page', () => {
     expect(authApi.loginUser).toHaveBeenCalledWith({ email: d.email, password: d.password })
     expect(screen.getByRole('note').textContent).toContain('You are using a demo account.')
     expect(screen.getAllByText('Demo').length).toBeGreaterThan(0)
-    expect(portalApi.fetchPortal).toHaveBeenCalledWith(d.area, expect.anything())
+    // The portal request starts in an effect after the dashboard mounts: wait for it rather than racing it.
+    await waitFor(() => expect(portalApi.fetchPortal).toHaveBeenCalledWith(d.area, expect.anything()))
     expect(await screen.findByText(`Sample ${d.area} content.`)).toBeTruthy()
   })
 

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+import threading
+from contextlib import contextmanager
+from datetime import UTC, datetime, timedelta
 
 import jwt
 from argon2 import PasswordHasher, Type
@@ -20,16 +22,44 @@ _DUMMY_HASH = _hasher.hash("dummy-password-for-timing-equalisation")
 TOKEN_TYPE_ACCESS = "access"
 
 
+class HashingBusyError(Exception):
+    """Too many password hashes are running; the request should be retried shortly (503)."""
+
+
+# Each Argon2 hash uses ~64 MiB, so concurrent hashes are capped (configure_hashing at startup).
+HASH_WAIT_SECONDS = 10
+_hash_slots = threading.BoundedSemaphore(4)
+
+
+def configure_hashing(max_concurrent: int) -> None:
+    global _hash_slots
+    _hash_slots = threading.BoundedSemaphore(max_concurrent)
+
+
+@contextmanager
+def _hash_slot():
+    slots = _hash_slots
+    if not slots.acquire(timeout=HASH_WAIT_SECONDS):
+        raise HashingBusyError
+    try:
+        yield
+    finally:
+        slots.release()
+
+
 def hash_password(password: str) -> str:
-    return _hasher.hash(password)
+    with _hash_slot():
+        return _hasher.hash(password)
 
 
 def verify_password(password: str, password_hash: str | None) -> bool:
-    """Return True if the password matches. Never raises for bad input."""
-    try:
-        return _hasher.verify(password_hash or _DUMMY_HASH, password) and password_hash is not None
-    except (VerifyMismatchError, VerificationError, InvalidHashError):
-        return False
+    """Return True if the password matches. Never raises for bad input
+    (raises HashingBusyError only when the server is overloaded)."""
+    with _hash_slot():
+        try:
+            return _hasher.verify(password_hash or _DUMMY_HASH, password) and password_hash is not None
+        except (VerifyMismatchError, VerificationError, InvalidHashError):
+            return False
 
 
 def password_needs_rehash(password_hash: str) -> bool:
@@ -51,7 +81,7 @@ def create_access_token(subject: str, role: str, settings: Settings) -> tuple[st
     """Return (token, expires_in_seconds)."""
     if settings.jwt_secret_key is None:
         raise RuntimeError("JWT_SECRET_KEY is not configured.")
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expires_in = settings.access_token_expire_minutes * 60
     payload = {
         "sub": subject,

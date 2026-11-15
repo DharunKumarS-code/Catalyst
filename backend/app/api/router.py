@@ -1,6 +1,17 @@
 from fastapi import APIRouter
 
-from app.api.routes import appointments, auth, care, health, invitations, medications, notifications, portal, profiles, relationships
+from app.api.routes import (
+    appointments,
+    auth,
+    care,
+    health,
+    invitations,
+    medications,
+    notifications,
+    portal,
+    profiles,
+    relationships,
+)
 
 api_router = APIRouter(prefix="/api")
 api_router.include_router(health.router)

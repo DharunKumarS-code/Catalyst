@@ -2,11 +2,8 @@
 
 An elderly care and medication management platform connecting elderly individuals, family members and caretakers.
 
-**Current status: Phase 3 — elderly profiles and secure family/caretaker linking.**
-- Phase 1: the frontend shell, the backend API, the MongoDB connection and a live health check.
-- Phase 2: registration and login for three roles (Elderly, Caretaker, Family member), Argon2id password hashing, JWT access tokens, role-based API access, and protected frontend routes.
+**Features:** registration and login for three roles (Elderly, Caretaker, Family member) with Argon2id and JWT; elderly profiles with invitation-based linking; medications with generated dose schedules and adherence; appointments; a care dashboard for linked caretakers and family; email reminders and missed-dose alerts; demo accounts; accessibility for older users (18px base text, 48px+ targets, route announcements).
 
-Medication features are not implemented yet.
 
 ## Technology stack
 
@@ -190,7 +187,7 @@ The access token is kept **in memory** and mirrored to **`sessionStorage`**. It 
 
 Frontend route guards (`ProtectedRoute`) only control what the user sees. The backend enforces every permission.
 
-## Elderly profiles & family/caretaker linking (Phase 3)
+## Elderly profiles & family/caretaker linking
 
 | Method | Path | Access | Purpose |
 | ------ | ---- | ------ | ------- |
@@ -225,9 +222,9 @@ All timestamps are UTC.
 - **Access checks:** linked-profile access is checked against an *active* relationship on every request, so revocation takes effect at once even for tokens already issued. A profile you can't see and a profile that doesn't exist both return 404.
 - **Demo isolation:** profiles, invitations and relationships copy the user's `is_demo` flag. Demo users can link only with demo data: a code from the other side is treated as invalid, and linked-profile queries filter by the flag.
 
-## Medication management (Phase 4)
+## Medication management
 
-The elderly user manages their own medicines. Linked caretakers and family members get **read-only** access. Every endpoint requires a profile, because the profile's IANA `timezone` (for example `Europe/London`) decides when doses happen. Profiles created before Phase 4 default to `UTC`.
+The elderly user manages their own medicines. Linked family members get **read-only** access. Linked caretakers are read-only unless the elderly user allows them to record doses (Connections page). Every endpoint requires a profile, because the profile's IANA `timezone` (for example `Europe/London`) decides when doses happen. Profiles without a time zone default to `UTC`.
 
 | Method | Path | Access | Purpose |
 | ------ | ---- | ------ | ------- |
@@ -265,7 +262,7 @@ The elderly user manages their own medicines. Linked caretakers and family membe
 
 **Security:** every query is scoped by the owner's `user_id`, which comes from the token. Members are authorized through an active relationship on every request, so revocation takes effect immediately. Members have no write routes. Demo data is labelled `is_demo` and stays isolated: demo users only ever see demo profiles and demo medications.
 
-## Appointment management (Phase 5)
+## Appointment management
 
 | Method | Path | Access | Purpose |
 | ------ | ---- | ------ | ------- |
@@ -295,7 +292,7 @@ The elderly user manages their own medicines. Linked caretakers and family membe
 
 **Access and demo data:** access works exactly as for medications. The owner comes from the token, and member access is re-checked against an active relationship on every request. Demo data is isolated by `is_demo`. The seed command adds three sample appointments: two upcoming and one completed.
 
-## Care dashboard for caretakers and family (Phase 6)
+## Care dashboard for caretakers and family
 
 `GET /api/care-dashboard` (`caretaker`, `family_member`) returns a read-only summary of every profile the member is **actively** linked to. It powers the `/care` page. For each person it includes:
 - Profile basics and emergency contact.
@@ -318,7 +315,7 @@ The elderly user manages their own medicines. Linked caretakers and family membe
 
 Missing doses are generated only when needed. No new collections were added. Queries use the existing `doses (user_id, local_date)`, `appointments (user_id, status, scheduled_at)` and `user_id` indexes.
 
-## Reminders and notifications (Phase 7)
+## Reminders and notifications
 
 The `/notifications` page shows the delivery status, your settings, a "Send test message" button and your notification history.
 
@@ -392,68 +389,38 @@ Exit code 1 means demo mode is disabled; 2 means the database is unreachable. Re
 
 ## Deployment
 
-**Recommended setup:**
-- **Backend:** Google Cloud Run. This meets the hackathon's Cloud Run requirement.
-- **Frontend:** Vercel.
-- **Database:** MongoDB Atlas.
+**Live setup:** backend on **Render**, frontend on **Vercel**, database on **MongoDB Atlas**, all on free tiers. No paid services are required. `backend/Dockerfile` also builds a slim, non-root image if a container host is preferred.
 
-Render alone does **not** meet the Cloud Run requirement.
+### Backend on Render
 
-### Backend on Google Cloud Run
+- Build: `pip install -r requirements.txt` (versions are pinned). Start: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
+- Set `ENVIRONMENT=production`, `MONGODB_URI`, `JWT_SECRET_KEY`, `CORS_ORIGINS`, `APP_BASE_URL` and `EMAIL_MODE=preview` in the Render dashboard. Never commit them.
+- Render sits behind Cloudflare. Set `CLIENT_IP_HEADER=CF-Connecting-IP` so per-IP login and registration limits apply. Without it, per-IP limits are off in production and only per-account limits apply.
+- Indexes (including the notification retention TTL and the scheduler top-up index) are created at startup.
+- Verify: `curl https://SERVICE_URL/api/health` returns `"status": "ok"` with the database `connected`.
 
-`backend/Dockerfile` builds a slim Python 3.11 image:
-- It runs as a non-root user.
-- It starts one uvicorn worker on `$PORT`.
-- `.dockerignore` and `.gcloudignore` keep `.env`, `.venv` and tests out of the image and out of the Cloud Build upload.
-- No secrets are baked into the image.
+**Reminder scheduler:** runs as a background thread. Only the holder of a MongoDB lease (`scheduler_locks`) runs cycles, so more than one instance is safe. Unique `dedupe_key`s and atomic delivery claims prevent duplicate emails. Set `NOTIFICATIONS_ENABLED=false` to turn it off.
 
-**Manual steps** (they need your Google account, a project with billing enabled and your Atlas credentials):
-
-```bash
-gcloud auth login
-gcloud config set project YOUR_PROJECT_ID
-gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com
-
-# Secrets live in Secret Manager, never in the repo or the command line history.
-printf '%s' 'mongodb+srv://...'  | gcloud secrets create mongodb-uri --data-file=-
-openssl rand -base64 48 | tr -d '\n' | gcloud secrets create jwt-secret --data-file=-
-# Grant the Cloud Run runtime service account access to both secrets:
-# roles/secretmanager.secretAccessor on mongodb-uri and jwt-secret.
-
-gcloud run deploy eldercare-api --source backend --region asia-south1 \
-  --allow-unauthenticated --port 8080 \
-  --min-instances 1 --max-instances 3 --no-cpu-throttling \
-  --set-secrets MONGODB_URI=mongodb-uri:latest,JWT_SECRET_KEY=jwt-secret:latest \
-  --set-env-vars ENVIRONMENT=production,CORS_ORIGINS=https://YOUR-APP.vercel.app,APP_BASE_URL=https://YOUR-APP.vercel.app,EMAIL_MODE=preview
-```
-
-**Atlas network access:** Cloud Run has no fixed outbound IP. Either allow `0.0.0.0/0` in Atlas (the database stays protected by its credentials and TLS), or set up a Serverless VPC connector with Cloud NAT and a static IP.
-
-**Verify the deployment:**
-- `curl https://SERVICE_URL/api/health` should return `"status": "ok"` and `"database": {"status": "connected"}`. A `degraded` response means Atlas is unreachable; check the network access list and the secret.
-- You can use `/api/health` as the Cloud Run startup or liveness probe.
-
-**Why these flags:**
-- `--no-cpu-throttling` and `--min-instances 1`: the reminder scheduler is a background thread, and Cloud Run throttles CPU outside requests unless this is set.
-- More than one instance is safe. Every instance starts the thread, but only the holder of a MongoDB lease (`scheduler_locks`, renewed every cycle and expiring after 2 × interval + 30 s) runs reminder cycles. If that instance stops, another takes over.
-- Unique `dedupe_key`s and atomic delivery claims also prevent duplicate emails.
-- To turn reminders off on an instance, set `NOTIFICATIONS_ENABLED=false`.
-
-**Email:**
-- Keep `EMAIL_MODE=preview` (the default) until you have tested real delivery.
-- To enable it, add `EMAIL_MODE=smtp` plus `SMTP_HOST`, `SMTP_FROM` and `SMTP_USERNAME`. Store `SMTP_PASSWORD` in Secret Manager (`--set-secrets SMTP_PASSWORD=smtp-password:latest`).
-- Then use **Send test message** on `/notifications`.
+**Email:** keep `EMAIL_MODE=preview` until real delivery has been tested. For SMTP, set `EMAIL_MODE=smtp`, `SMTP_HOST`, `SMTP_FROM`, `SMTP_USERNAME` and `SMTP_PASSWORD` (as a secret), then use **Send test message** on `/notifications`.
 
 **Production safeguards** (`ENVIRONMENT=production`):
-- Startup fails if `CORS_ORIGINS` contains `*` or `DEBUG=true`.
-- Demo accounts stay off unless `DEMO_ACCOUNTS_ALLOW_PRODUCTION=true` is also set. For a judged demo, set both demo flags, then run `python -m app.scripts.seed_demo_accounts` once against the production database, for example from Cloud Shell with the same env vars.
+- Startup fails if `CORS_ORIGINS` contains `*` or `DEBUG=true`. API docs (`/docs`, `/openapi.json`) are disabled.
+- Demo accounts stay off unless `DEMO_ACCOUNTS_ALLOW_PRODUCTION=true` is also set. Their credentials are public, so use them only for development or a judged demo.
+
+### Quality checks and CI
+
+`.github/workflows/ci.yml` runs on every push and pull request. It uses a throwaway `mongo:7` service container and never production credentials.
+- Backend: `ruff check`, `ruff format --check`, `pytest --cov` (90% coverage gate).
+- Frontend: `npm run lint` (oxlint), `npm run test:coverage` (Vitest with axe accessibility checks and coverage thresholds), `npm run build`.
+
+To run locally: `cd backend && python -m ruff check app tests && python -m pytest --cov`, then `cd frontend && npm run lint && npm run test:coverage && npm run build`. `mypy app` is configured in `backend/pyproject.toml` but not yet enforced.
 
 ### Frontend on Vercel
 
 1. Import the repo with root directory `frontend` and the **Vite** preset. The build command is `npm run build` and the output directory is `dist`.
 2. Set the env var `VITE_API_BASE_URL=https://SERVICE_URL`, with no trailing slash. A production build without it shows a configuration error instead of calling localhost.
 3. `vercel.json` adds the SPA rewrite and security headers (`nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`).
-4. After Vercel assigns the URL, update `CORS_ORIGINS` and `APP_BASE_URL` on Cloud Run:
+4. After Vercel assigns the URL, update `CORS_ORIGINS` and `APP_BASE_URL` on Render:
 
    ```bash
    gcloud run services update eldercare-api --region asia-south1 \
@@ -466,8 +433,8 @@ Only `VITE_*` variables reach the browser. Never put secrets in them.
 
 | Where | Variable | Notes |
 |---|---|---|
-| Cloud Run (secret) | `MONGODB_URI`, `JWT_SECRET_KEY` (≥ 32 chars), `SMTP_PASSWORD` | Store in Secret Manager. |
-| Cloud Run | `ENVIRONMENT=production`, `CORS_ORIGINS`, `APP_BASE_URL`, `MONGODB_DB_NAME` | |
-| Cloud Run | `EMAIL_MODE`, `SMTP_HOST`/`PORT`/`USERNAME`/`FROM`/`SECURITY` | Optional; defaults to preview. |
-| Cloud Run | `NOTIFICATION_INTERVAL_SECONDS`, `MISSED_DOSE_GRACE_MINUTES`, `LOGIN_MAX_FAILURES`, … | Optional; see `backend/.env.example`. |
+| Render (secret) | `MONGODB_URI`, `JWT_SECRET_KEY` (≥ 32 chars), `SMTP_PASSWORD` | Set in the Render dashboard; never commit. |
+| Render | `ENVIRONMENT=production`, `CORS_ORIGINS`, `APP_BASE_URL`, `MONGODB_DB_NAME` | |
+| Render | `EMAIL_MODE`, `SMTP_HOST`/`PORT`/`USERNAME`/`FROM`/`SECURITY` | Optional; defaults to preview. |
+| Render | `NOTIFICATION_INTERVAL_SECONDS`, `MISSED_DOSE_GRACE_MINUTES`, `LOGIN_MAX_FAILURES`, … | Optional; see `backend/.env.example`. |
 | Vercel | `VITE_API_BASE_URL`, `VITE_API_TIMEOUT_MS` | Public values only. |

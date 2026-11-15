@@ -1,5 +1,5 @@
 import re
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from typing import Annotated
 
 from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, StringConstraints, field_validator
@@ -68,7 +68,7 @@ class ProfileIn(BaseModel):
     def _plausible_dob(cls, value: date | None) -> date | None:
         if value is None:
             return value
-        if value > datetime.now(timezone.utc).date():
+        if value > datetime.now(UTC).date():
             raise ValueError("Date of birth cannot be in the future.")
         if value.year < 1900:
             raise ValueError("Enter a date of birth after 1900.")

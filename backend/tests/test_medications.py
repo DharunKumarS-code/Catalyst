@@ -1,6 +1,6 @@
 """Medication, dose and adherence API tests (local throwaway MongoDB, frozen clock)."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -11,7 +11,7 @@ from app.demo.sample_data import provision_demo_sample_data
 from app.repositories.users import UserRepository
 from tests.helpers import create_profile, invite, new_user, redeem
 
-UTC = timezone.utc
+UTC = UTC
 T0 = datetime(2026, 11, 16, 12, 0, tzinfo=UTC)  # a Monday, noon UTC
 TODAY = "2026-11-16"
 
@@ -166,9 +166,16 @@ def test_schedule_uses_profile_timezone(client, clock):
 
 def test_invalid_timezone_rejected(client, clock):
     user = new_user(client, "elderly")
-    res = client.post("/api/profiles/me", json={"full_name": "A B", "emergency_contact_name": "C D",
-                                               "emergency_contact_phone": "07700 900123", "timezone": "Nowhere/City"},
-                      headers=user["headers"])
+    res = client.post(
+        "/api/profiles/me",
+        json={
+            "full_name": "A B",
+            "emergency_contact_name": "C D",
+            "emergency_contact_phone": "07700 900123",
+            "timezone": "Nowhere/City",
+        },
+        headers=user["headers"],
+    )
     assert res.status_code == 422
 
 
@@ -194,8 +201,11 @@ def test_edit_rebuilds_future_pending_but_keeps_recorded(client, owner, clock):
     med = add_med(client, owner)
     morning = today(client, owner)["doses"][0]
     assert set_status(client, owner, morning, "taken").status_code == 200
-    res = client.put(f"/api/medications/{med['id']}",
-                     json={**MED, "frequency": "once_daily", "times": ["21:00"]}, headers=owner["headers"])
+    res = client.put(
+        f"/api/medications/{med['id']}",
+        json={**MED, "frequency": "once_daily", "times": ["21:00"]},
+        headers=owner["headers"],
+    )
     assert res.status_code == 200
     doses = today(client, owner)["doses"]
     assert [(d["local_time"], d["status"]) for d in doses] == [("08:00", "taken"), ("21:00", "pending")]
@@ -252,8 +262,11 @@ def test_timing_rules(client, owner, clock):
     history = client.get("/api/doses/history", headers=owner["headers"]).json()
     assert soon["id"] in [d["id"] for d in history]  # ...and appears in history straight away
     tomorrow = mongodb.db[DOSES_COLLECTION].find_one({"local_date": "2026-11-17"})
-    res = client.patch(f"/api/doses/{tomorrow['_id']}/status", json={"status": "taken", "expected_status": "pending"},
-                       headers=owner["headers"])
+    res = client.patch(
+        f"/api/doses/{tomorrow['_id']}/status",
+        json={"status": "taken", "expected_status": "pending"},
+        headers=owner["headers"],
+    )
     assert res.status_code == 422
 
 
@@ -262,8 +275,11 @@ def test_cancelled_dose_is_immutable(client, owner):
     today(client, owner)
     client.post(f"/api/medications/{med['id']}/discontinue", headers=owner["headers"])
     cancelled = mongodb.db[DOSES_COLLECTION].find_one({"status": "cancelled"})
-    res = client.patch(f"/api/doses/{cancelled['_id']}/status", json={"status": "taken", "expected_status": "pending"},
-                       headers=owner["headers"])
+    res = client.patch(
+        f"/api/doses/{cancelled['_id']}/status",
+        json={"status": "taken", "expected_status": "pending"},
+        headers=owner["headers"],
+    )
     assert res.status_code == 409
 
 
@@ -278,8 +294,11 @@ def test_never_auto_marked(client, owner, clock):
 def test_invalid_status_body(client, owner):
     add_med(client, owner)
     dose = today(client, owner)["doses"][0]
-    for body in ({"status": "cancelled", "expected_status": "pending"}, {"status": "taken"},
-                 {"status": "taken", "expected_status": "pending", "taken_at": "2020-01-01"}):
+    for body in (
+        {"status": "cancelled", "expected_status": "pending"},
+        {"status": "taken"},
+        {"status": "taken", "expected_status": "pending", "taken_at": "2020-01-01"},
+    ):
         assert client.patch(f"/api/doses/{dose['id']}/status", json=body, headers=owner["headers"]).status_code == 422
 
 
@@ -390,3 +409,35 @@ def test_demo_sample_data_isolated_and_idempotent(client, auth_settings, owner, 
     assert client.get(f"/api/linked-profiles/{linked[0]['profile_id']}/medications", headers=care_h).status_code == 200
     real_base = f"/api/linked-profiles/{owner['profile']['id']}"
     assert client.get(f"{real_base}/medications", headers=care_h).status_code == 404
+
+
+def test_overview_matches_the_three_separate_endpoints(client, owner, clock):
+    """The combined endpoint returns exactly what the three separate requests return."""
+    add_med(client, owner)
+    add_med(client, owner, name="Aspirin", frequency="once_daily", times=["09:00"])
+    dose = next(d for d in today(client, owner)["doses"] if d["is_due"])
+    assert set_status(client, owner, dose, "taken").status_code == 200
+
+    res = client.get("/api/medications/overview", headers=owner["headers"])
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["today"] == today(client, owner)
+    assert body["adherence"] == client.get("/api/adherence", headers=owner["headers"]).json()
+    assert body["medications"] == client.get("/api/medications", headers=owner["headers"]).json()
+
+
+def test_overview_access_rules(client, owner, clock):
+    add_med(client, owner)
+    member = new_user(client, "caretaker")
+    stranger = new_user(client, "family_member")
+    assert redeem(client, member, invite(client, owner, "caretaker")["code"]).status_code == 201
+    pid = owner["profile"]["id"]
+
+    linked = client.get(f"/api/linked-profiles/{pid}/medications/overview", headers=member["headers"])
+    assert linked.status_code == 200
+    assert linked.json()["today"]["doses"][0]["can_mark_taken"] is False  # read-only without a grant
+    assert (
+        client.get(f"/api/linked-profiles/{pid}/medications/overview", headers=stranger["headers"]).status_code == 404
+    )
+    assert client.get("/api/medications/overview", headers=member["headers"]).status_code == 403
+    assert client.get("/api/medications/overview").status_code == 401

@@ -26,6 +26,14 @@ export async function revokeConnection(id) {
   await apiClient.delete(`/api/relationships/${encodeURIComponent(id)}`)
 }
 
+/** Allow (or stop) a caretaker recording doses for you. Family members cannot be given this. */
+export async function setDosePermission(id, canRecordDoses) {
+  const { data } = await apiClient.put(`/api/relationships/${encodeURIComponent(id)}/permissions`, {
+    can_record_doses: canRecordDoses,
+  })
+  return data
+}
+
 // ---- Caretakers / family members ----
 
 /** POST /api/invitations/redeem -> { message, linked } */

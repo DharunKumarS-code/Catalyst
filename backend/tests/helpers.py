@@ -25,7 +25,12 @@ def new_user(client, role: str, name: str | None = None) -> dict:
     n = next(_counter)
     res = client.post(
         "/api/auth/register",
-        json={"name": name or f"{role.title()} {n}", "email": f"{role}{n}@example.com", "password": PASSWORD, "role": role},
+        json={
+            "name": name or f"{role.title()} {n}",
+            "email": f"{role}{n}@example.com",
+            "password": PASSWORD,
+            "role": role,
+        },
     )
     assert res.status_code == 201, res.text
     body = res.json()

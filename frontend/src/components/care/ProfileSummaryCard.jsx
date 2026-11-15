@@ -5,7 +5,7 @@ import DemoBadge from '../auth/DemoBadge'
 function Count({ label, value, tone }) {
   return (
     <div className={`rounded-lg px-3 py-2 ${tone}`}>
-      <dt className="text-sm font-medium">{label}</dt>
+      <dt className="text-base font-medium">{label}</dt>
       <dd className="text-2xl font-bold tabular-nums">{value}</dd>
     </div>
   )
@@ -28,11 +28,11 @@ export default function ProfileSummaryCard({ profile, selected, onSelect }) {
       <span className="flex flex-wrap items-center gap-2">
         <span className="text-xl font-semibold text-slate-900">{profile.full_name}</span>
         {profile.is_demo && <DemoBadge />}
-        {selected && <span className="ml-auto text-sm font-semibold text-teal-800">Showing below</span>}
+        {selected && <span className="ml-auto text-base font-semibold text-teal-800">Showing below</span>}
       </span>
 
       <span className="block">
-        <span className="block text-sm font-medium text-slate-600">Today&rsquo;s medicine adherence</span>
+        <span className="block text-base font-medium text-slate-600">Today&rsquo;s medicine adherence</span>
         <span className="block text-4xl font-bold text-slate-900" data-testid="card-adherence">
           {formatPercent(today.adherence_percent)}
         </span>

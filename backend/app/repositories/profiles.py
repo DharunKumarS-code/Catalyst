@@ -43,3 +43,12 @@ class ProfileRepository:
             {"$set": {**data, "updated_at": utc_now()}},
             return_document=ReturnDocument.AFTER,
         )
+
+    def for_users(self, user_ids: list[ObjectId]) -> dict[ObjectId, dict]:
+        """{user_id: profile} with only the fields reminders need (name, time zone, demo flag)."""
+        if not user_ids:
+            return {}
+        cursor = self._profiles.find(
+            {"user_id": {"$in": user_ids}}, {"user_id": 1, "full_name": 1, "timezone": 1, "is_demo": 1}
+        )
+        return {p["user_id"]: p for p in cursor}

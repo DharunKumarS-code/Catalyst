@@ -140,3 +140,11 @@ Mobile: `display` 32px, `h1` 28px, `h2` 24px. Body stays 18px.
 - Respects `prefers-reduced-motion`; animations ≤ 200ms and non-essential.
 - Logical heading order; landmarks (`header`, `nav`, `main`, `footer`).
 - Status changes announced to screen readers (live regions).
+
+## Data access and performance
+
+- **Layering:** routes, then services (business rules such as `Scope.may_record`), then repositories (the only code that touches MongoDB collections). The notification engine also reads through repositories.
+- **Projections:** dose and appointment `history` arrays (audit trail) are excluded from list and read queries (`WITHOUT_HISTORY`). Today's-doses replies shrank from 12.9 KB to 9.2 KB of database payload.
+- **Combined overview:** `GET /api/medications/overview` (and the linked-profile variant) replaces three requests on the medication page: 12 database commands and 18 KB become 5 commands and 7.6 KB. The original endpoints remain.
+- **Reminder cycle:** each pass loads only due doses and appointments, the medications that need schedule top-up (`medications_top_up` index), and batched profiles, users, preferences and links. It then inserts new notifications in one `insert_many` after one dedupe-key lookup. In a 500-user benchmark the steady-state cycle went from 2,316 database commands and 2.95 s to 18 commands and about 0.45 s, with identical notifications queued.
+- **Frontend:** 18 secondary routes are lazy-loaded (`React.lazy` with an accessible `Suspense` loader). The entry bundle went from 445.9 KB (134.0 KB gzip) to 355.4 KB (114.7 KB gzip).

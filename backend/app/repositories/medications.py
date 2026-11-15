@@ -79,3 +79,41 @@ class MedicationRepository:
             {"user_id": user_id, "status": "active"},
             {"$set": {"schedule_from": schedule_from, "scheduled_through": None}},
         )
+
+    # Fields that dose generation reads (see services.scheduling.plan_doses and MedicationService.ensure_schedule).
+    SCHEDULE_PROJECTION = {
+        "user_id": 1,
+        "profile_id": 1,
+        "is_demo": 1,
+        "status": 1,
+        "times": 1,
+        "start_date": 1,
+        "end_date": 1,
+        "schedule_from": 1,
+        "scheduled_through": 1,
+    }
+
+    def needing_top_up(self, generated_before: str) -> list[dict]:
+        """Active medications whose generated doses end before `generated_before` (an ISO date)
+        and that have not reached their end date. Everything else is already scheduled, so the
+        reminder cycle skips it instead of re-planning every medication every minute."""
+        query = {
+            "status": "active",
+            "$and": [
+                {"$or": [{"scheduled_through": None}, {"scheduled_through": {"$lt": generated_before}}]},
+                {
+                    "$or": [
+                        {"end_date": None},
+                        {"scheduled_through": None},
+                        {"$expr": {"$lt": ["$scheduled_through", "$end_date"]}},
+                    ]
+                },
+            ],
+        }
+        return list(self._meds.find(query, self.SCHEDULE_PROJECTION))
+
+    def labels(self, medication_ids: list[ObjectId]) -> dict[ObjectId, dict]:
+        """{id: {name, dosage}} for in-app notification labels."""
+        if not medication_ids:
+            return {}
+        return {m["_id"]: m for m in self._meds.find({"_id": {"$in": medication_ids}}, {"name": 1, "dosage": 1})}

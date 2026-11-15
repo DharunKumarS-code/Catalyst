@@ -52,7 +52,7 @@ export default function InvitationList({ invitations, onChanged }) {
                     Created {formatDateTime(inv.created_at)}
                     {inv.status === 'pending' && <> · expires {formatDateTime(inv.expires_at)}</>}
                   </p>
-                  <span className={`mt-2 inline-flex rounded-full px-3 py-0.5 text-sm font-medium ring-1 ring-inset ${status.className}`}>
+                  <span className={`mt-2 inline-flex rounded-full px-3 py-0.5 text-base font-medium ring-1 ring-inset ${status.className}`}>
                     {status.label}
                   </span>
                 </div>

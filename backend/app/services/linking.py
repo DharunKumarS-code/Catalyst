@@ -19,7 +19,6 @@ from datetime import datetime, timedelta
 from fastapi import HTTPException, status
 
 from app.core.config import Settings
-from app.db.ids import to_object_id
 from app.repositories.invitations import InvitationRepository, RedemptionFailureRepository
 from app.repositories.profiles import ProfileRepository
 from app.repositories.relationships import RelationshipExistsError, RelationshipRepository
@@ -46,7 +45,7 @@ class RedeemContext:
 
 def redeem_invitation(raw_code: str, user: UserPublic, ctx: RedeemContext, now: datetime) -> tuple[dict, dict]:
     """Returns (relationship, profile). Raises HTTPException with a user-facing message."""
-    user_id = to_object_id(user.id)
+    user_id = user.oid
     window = timedelta(minutes=ctx.settings.redeem_failure_window_minutes)
 
     if ctx.failures.count_recent(user_id, now, window) >= ctx.settings.redeem_max_failures:

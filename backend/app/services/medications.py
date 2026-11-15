@@ -29,7 +29,17 @@ class Scope:
 
     owner_id: ObjectId  # the elderly user's id
     profile: dict
-    can_modify: bool  # True only for the owner; caretakers/family members are read-only
+    can_modify: bool  # medication changes: True only for the owner
+    # Recording doses: the owner always; a caretaker only when the owner has granted it on an
+    # ACTIVE relationship (re-read on every request). Family members never.
+    can_record: bool | None = None  # None = same as can_modify
+    actor_id: ObjectId | None = None  # who is acting (defaults to the owner)
+    actor_name: str | None = None
+    actor_role: str = "elderly"
+
+    @property
+    def may_record(self) -> bool:
+        return self.can_modify if self.can_record is None else self.can_record
 
     @property
     def tz(self) -> ZoneInfo:
@@ -41,6 +51,22 @@ class Scope:
 
     def today(self, now: datetime) -> date:
         return now.astimezone(self.tz).date()
+
+
+def member_scope_for(rel: dict, profile: dict, actor_id: ObjectId, actor_name: str) -> Scope:
+    """Scope for a caretaker/family member on an ACTIVE relationship loaded on this request.
+    Members never change medications. A caretaker may record doses only while the elderly
+    owner's grant is set on that relationship; family members never can."""
+    may_record = rel["role"] == "caretaker" and bool(rel.get("can_record_doses"))
+    return Scope(
+        owner_id=profile["user_id"],
+        profile=profile,
+        can_modify=False,
+        can_record=may_record,
+        actor_id=actor_id,
+        actor_name=actor_name,
+        actor_role=rel["role"],
+    )
 
 
 class MedicationService:
@@ -101,7 +127,9 @@ class MedicationService:
 
     def update(self, scope: Scope, med: dict, data: dict, now: datetime) -> dict | None:
         schedule_changed = any(med.get(f) != data.get(f) for f in SCHEDULE_FIELDS)
-        updated = self.meds.update(med["_id"], scope.owner_id, data, reset_schedule_from=now if schedule_changed else None)
+        updated = self.meds.update(
+            med["_id"], scope.owner_id, data, reset_schedule_from=now if schedule_changed else None
+        )
         if updated is not None and schedule_changed:
             # Recorded doses (taken/missed) and doses already due are kept as history;
             # upcoming unrecorded doses are rebuilt from the new schedule.
@@ -152,9 +180,13 @@ class MedicationService:
                     status_changed_at=d.get("status_changed_at"),
                     taken_at=d.get("taken_at"),
                     is_due=now >= d["scheduled_at"],
-                    can_mark_taken=scope.can_modify and status != "taken" and status != "cancelled"
+                    can_mark_taken=scope.may_record
+                    and status != "taken"
+                    and status != "cancelled"
                     and now >= d["scheduled_at"] - self.early,
-                    can_mark_missed=scope.can_modify and status in ("pending", "taken") and now >= d["scheduled_at"],
+                    can_mark_missed=scope.may_record and status in ("pending", "taken") and now >= d["scheduled_at"],
+                    recorded_by_name=d.get("status_changed_by_name"),
+                    recorded_by_role=d.get("status_changed_by_role"),
                 )
             )
         return out
@@ -173,8 +205,8 @@ class MedicationService:
         return self.dose_views(scope, docs, now)
 
     def set_status(self, scope: Scope, dose_id: ObjectId, *, new: str, expected: str, now: datetime) -> DoseOut:
-        if not scope.can_modify:
-            raise DoseRuleError("Only the medication owner can record doses.", 403)
+        if not scope.may_record:
+            raise DoseRuleError("You do not have permission to record doses for this person.", 403)
         dose = self.doses.get(dose_id, scope.owner_id)
         if dose is None:
             raise DoseRuleError("Dose not found.", 404)
@@ -189,7 +221,16 @@ class MedicationService:
         if new == "missed" and now < dose["scheduled_at"]:
             raise DoseRuleError("A dose cannot be marked as missed before its scheduled time.", 422)
 
-        updated = self.doses.transition(dose_id, scope.owner_id, expected=expected, new=new, now=now, by=scope.owner_id)
+        updated = self.doses.transition(
+            dose_id,
+            scope.owner_id,
+            expected=expected,
+            new=new,
+            now=now,
+            by=scope.actor_id or scope.owner_id,
+            by_name=scope.actor_name,
+            by_role=scope.actor_role,
+        )
         if updated is None:  # lost a race with another update
             raise DoseRuleError("This dose was already updated. Refresh to see its current status.", 409)
         views = self.dose_views(scope, [updated], now)
@@ -201,6 +242,18 @@ class MedicationService:
 
     def adherence(self, scope: Scope, now: datetime, medication_id: ObjectId | None = None) -> AdherenceSummary:
         self.ensure_schedule(scope, now)
+        return self._adherence_summary(scope, now, medication_id)
+
+    def overview(self, scope: Scope, now: datetime) -> tuple[str, list[DoseOut], AdherenceSummary, list[dict]]:
+        """Today's doses, adherence and all medications in one pass: the medications are read once
+        and reused for schedule top-up and dose labels, instead of three separate requests."""
+        meds = self.meds.list_for_user(scope.owner_id)
+        self.ensure_schedule(scope, now, [m for m in meds if m["status"] == "active"])
+        day = scope.today(now).isoformat()
+        doses = self.dose_views(scope, self.doses.for_day(scope.owner_id, day), now, meds={m["_id"]: m for m in meds})
+        return day, doses, self._adherence_summary(scope, now, None), meds
+
+    def _adherence_summary(self, scope: Scope, now: datetime, medication_id: ObjectId | None) -> AdherenceSummary:
         today = scope.today(now)
         dates = [(today - timedelta(days=i)).isoformat() for i in range(WEEK_DAYS - 1, -1, -1)]
         counts = self.doses.counts_by_day(scope.owner_id, dates, now, medication_id)

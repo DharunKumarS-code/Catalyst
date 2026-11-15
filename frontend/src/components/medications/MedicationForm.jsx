@@ -79,7 +79,7 @@ export default function MedicationForm({ initialMedication, submitLabel, onSubmi
       <fieldset className="flex flex-col gap-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <legend className="px-1 text-xl font-semibold text-slate-900">When to take it</legend>
         <div>
-          <label htmlFor="medication-frequency" className="block text-sm font-medium text-slate-800">
+          <label htmlFor="medication-frequency" className="block text-base font-medium text-slate-800">
             How often
           </label>
           <select
@@ -98,11 +98,11 @@ export default function MedicationForm({ initialMedication, submitLabel, onSubmi
         </div>
 
         <fieldset aria-describedby={errors.times ? 'medication-times-error' : undefined}>
-          <legend className="text-sm font-medium text-slate-800">Times (in your profile&rsquo;s time zone)</legend>
+          <legend className="text-base font-medium text-slate-800">Times (in your profile&rsquo;s time zone)</legend>
           <div className="mt-1.5 grid gap-3 sm:grid-cols-2">
             {form.times.map((time, i) => (
               <div key={i}>
-                <label htmlFor={`medication-time-${i}`} className="block text-sm text-slate-600">
+                <label htmlFor={`medication-time-${i}`} className="block text-base text-slate-600">
                   Dose {i + 1}
                 </label>
                 <input
@@ -120,7 +120,7 @@ export default function MedicationForm({ initialMedication, submitLabel, onSubmi
             ))}
           </div>
           {errors.times && (
-            <p id="medication-times-error" className="mt-1.5 text-sm font-medium text-rose-700">
+            <p id="medication-times-error" className="mt-1.5 text-base font-medium text-rose-700">
               {errors.times}
             </p>
           )}

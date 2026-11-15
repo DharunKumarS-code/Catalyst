@@ -1,5 +1,5 @@
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends
 
@@ -20,6 +20,6 @@ def health_check(settings: Settings = Depends(get_settings)) -> HealthResponse:
         app_name=settings.app_name,
         version=settings.app_version,
         environment=settings.environment,
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
         database=DatabaseStatus(**asdict(db)),
     )

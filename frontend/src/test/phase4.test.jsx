@@ -29,7 +29,8 @@ vi.mock('../api/linking', () => ({
   listLinkedProfiles: vi.fn(async () => []),
   getLinkedProfile: vi.fn(),
 }))
-vi.mock('../api/medications', () => ({
+vi.mock('../api/medications', () => {
+  const api = {
   listMedications: vi.fn(),
   getMedication: vi.fn(),
   createMedication: vi.fn(),
@@ -40,7 +41,16 @@ vi.mock('../api/medications', () => ({
   getDoseHistory: vi.fn(),
   setDoseStatus: vi.fn(),
   getAdherence: vi.fn(),
-}))
+  }
+  // The page now loads everything in one request; compose it from the per-part mocks so the
+  // existing per-part fixtures and assertions keep working.
+  api.getMedicationOverview = vi.fn(async (opts, signal) => ({
+    today: await api.getTodaySchedule(opts, signal),
+    adherence: await api.getAdherence(opts, signal),
+    medications: await api.listMedications(opts, signal),
+  }))
+  return api
+})
 
 const at = '2026-11-01T00:00:00+00:00'
 const USERS = {
@@ -149,7 +159,7 @@ describe('elderly medication dashboard', () => {
     expect(within(rows[1]).queryByRole('button')).toBeNull() // not due yet: no controls
 
     await user.click(within(rows[0]).getByRole('button', { name: /as taken/ }))
-    expect(medApi.setDoseStatus).toHaveBeenCalledWith('d1', 'taken', 'pending')
+    expect(medApi.setDoseStatus).toHaveBeenCalledWith('d1', 'taken', 'pending', { profileId: undefined })
     expect(await screen.findByText(/Metformin at .* recorded as taken./)).toBeTruthy()
     await waitFor(() => expect(medApi.getTodaySchedule).toHaveBeenCalledTimes(2)) // refreshed
     expect(medApi.getAdherence).toHaveBeenCalledTimes(2)

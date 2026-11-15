@@ -105,8 +105,8 @@ export default function Login() {
             error={errors.password}
             required
           />
-          <label className="mt-2 inline-flex items-center gap-2 text-sm text-slate-700">
-            <input type="checkbox" checked={showPassword} onChange={(e) => setShowPassword(e.target.checked)} className="h-4 w-4 accent-teal-700" />
+          <label className="mt-2 inline-flex min-h-12 items-center gap-3 text-base text-slate-700">
+            <input type="checkbox" checked={showPassword} onChange={(e) => setShowPassword(e.target.checked)} className="h-6 w-6 accent-teal-700" />
             Show password
           </label>
         </div>
@@ -114,7 +114,7 @@ export default function Login() {
           ref={submitRef}
           type="submit"
           disabled={submitting}
-          className="rounded-lg bg-teal-700 px-4 py-3 text-base font-medium text-white shadow-sm transition-colors hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60"
+          className="min-h-14 rounded-xl bg-teal-700 px-5 py-3 text-lg font-semibold text-white shadow-sm transition-colors hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {submitting ? 'Signing in…' : 'Sign in'}
         </button>

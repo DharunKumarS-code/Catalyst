@@ -13,7 +13,7 @@ const Alert = forwardRef(function Alert({ variant = 'info', children }, ref) {
       ref={ref}
       tabIndex={-1}
       role={variant === 'error' ? 'alert' : 'status'}
-      className={`rounded-lg border px-4 py-3 text-sm focus:outline-none ${VARIANTS[variant] ?? VARIANTS.info}`}
+      className={`rounded-lg border px-4 py-3 text-base focus:outline-none ${VARIANTS[variant] ?? VARIANTS.info}`}
     >
       {children}
     </div>

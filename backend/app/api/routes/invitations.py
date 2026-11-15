@@ -2,7 +2,6 @@ from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 
-from app.core.time import utc_now
 from app.api.deps import (
     get_failure_repository,
     get_invitation_repository,
@@ -11,6 +10,7 @@ from app.api.deps import (
     require_roles,
 )
 from app.core.config import Settings, get_settings
+from app.core.time import utc_now
 from app.db.ids import to_object_id
 from app.repositories.invitations import InvitationRepository, RedemptionFailureRepository
 from app.repositories.profiles import ProfileRepository
@@ -41,7 +41,7 @@ def create_invitation(
     profiles: ProfileRepository = Depends(get_profile_repository),
     invitations: InvitationRepository = Depends(get_invitation_repository),
 ) -> InvitationCreated:
-    user_id = to_object_id(user.id)
+    user_id = user.oid
     profile = profiles.get_by_user(user_id)
     if profile is None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Please create your profile before inviting people.")
@@ -74,7 +74,7 @@ def list_invitations(
     invitations: InvitationRepository = Depends(get_invitation_repository),
 ) -> list[InvitationOut]:
     now = utc_now()
-    return [InvitationOut.from_document(d, now) for d in invitations.list_for_owner(to_object_id(user.id))]
+    return [InvitationOut.from_document(d, now) for d in invitations.list_for_owner(user.oid)]
 
 
 @router.delete("/{invitation_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -84,7 +84,7 @@ def cancel_invitation(
     invitations: InvitationRepository = Depends(get_invitation_repository),
 ) -> Response:
     oid = to_object_id(invitation_id)
-    if oid is None or not invitations.revoke(oid, to_object_id(user.id)):
+    if oid is None or not invitations.revoke(oid, user.oid):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No open invitation found.")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

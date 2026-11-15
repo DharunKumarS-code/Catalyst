@@ -1,6 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { getApiErrorMessage } from '../api/client'
 import {
+  NOTIFICATIONS_SEEN_EVENT,
+  getUnreadCount,
+  markNotificationsSeen,
   getNotificationPreferences,
   getNotificationStatus,
   listNotifications,
@@ -29,7 +32,7 @@ function recipientText(n) {
   return `To ${n.recipient_name} (${n.recipient_role === 'family_member' ? 'family member' : n.recipient_role})`
 }
 
-function History({ items }) {
+function History({ items, seenAt }) {
   if (items.length === 0) {
     return <p className="text-lg text-slate-600">No notifications yet. Reminders appear here as they are sent.</p>
   }
@@ -39,14 +42,19 @@ function History({ items }) {
         <li key={n.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" data-testid="notification-row">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-sm font-semibold uppercase tracking-wide text-teal-800">{KIND_LABELS[n.kind] ?? n.kind}</p>
+              <p className="text-base font-semibold uppercase tracking-wide text-teal-800">
+                {KIND_LABELS[n.kind] ?? n.kind}
+                {(seenAt === null || (seenAt && new Date(n.created_at) > new Date(seenAt))) && (
+                  <span className="ml-2 rounded-full bg-rose-700 px-2 py-0.5 text-sm normal-case tracking-normal text-white">New</span>
+                )}
+              </p>
               <p className="break-words text-lg font-semibold text-slate-900">{n.subject}</p>
               <p className="text-base text-slate-700">
                 {recipientText(n)}
                 {n.related_label && <> &middot; {n.related_label}</>}
                 {n.about_name && n.recipient_role !== 'self' && <> &middot; about {n.about_name}</>}
               </p>
-              <p className="text-sm text-slate-500">
+              <p className="text-base text-slate-500">
                 Created {formatDateTime(n.created_at)}
                 {n.sent_at && <> &middot; sent {formatDateTime(n.sent_at)}</>}
               </p>
@@ -72,6 +80,23 @@ export default function NotificationsPage() {
   const history = useResource(listNotifications)
   const [testState, setTestState] = useState(null)
   const [sending, setSending] = useState(false)
+  // When the history was last opened (undefined while loading, null if never): newer items show "New".
+  const [seenAt, setSeenAt] = useState(undefined)
+
+  useEffect(() => {
+    let active = true
+    getUnreadCount()
+      .then((d) => active && setSeenAt(d.seen_at ?? null))
+      .catch(() => {})
+      .finally(() => {
+        markNotificationsSeen()
+          .then(() => window.dispatchEvent(new Event(NOTIFICATIONS_SEEN_EVENT)))
+          .catch(() => {})
+      })
+    return () => {
+      active = false
+    }
+  }, [])
 
   async function sendTest() {
     setSending(true)
@@ -111,6 +136,7 @@ export default function NotificationsPage() {
               {status.data.scheduler_running
                 ? `Reminders are checked automatically every ${status.data.check_interval_seconds < 60 ? `${status.data.check_interval_seconds} seconds` : `${Math.round(status.data.check_interval_seconds / 60)} minute(s)`}.`
                 : 'Automatic reminder checks are not running on this server.'}
+              {status.data.last_check_at && <> Last checked {formatDateTime(status.data.last_check_at)}.</>}
             </span>
           </div>
         )}
@@ -138,7 +164,7 @@ export default function NotificationsPage() {
           <Button variant="secondary" onClick={history.reload} disabled={history.loading}>Refresh</Button>
         </div>
         {history.error && <Alert variant="error">{getApiErrorMessage(history.error, 'Could not load notification history.')}</Alert>}
-        {history.data ? <History items={history.data} /> : !history.error && <PageLoader label="Loading history…" />}
+        {history.data ? <History items={history.data} seenAt={seenAt} /> : !history.error && <PageLoader label="Loading history…" />}
       </section>
     </div>
   )

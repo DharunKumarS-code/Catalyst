@@ -18,7 +18,7 @@ export default function MedicationList({ medications, linkTo, emptyText }) {
             <span className="flex flex-wrap items-center gap-2">
               <span className="break-words text-xl font-semibold text-slate-900">{med.name}</span>
               {med.status === 'discontinued' && (
-                <span className="rounded-full bg-slate-200 px-2.5 py-0.5 text-sm font-semibold text-slate-800">Stopped</span>
+                <span className="rounded-full bg-slate-200 px-2.5 py-0.5 text-base font-semibold text-slate-800">Stopped</span>
               )}
               {med.is_demo && <DemoBadge />}
             </span>
@@ -26,7 +26,7 @@ export default function MedicationList({ medications, linkTo, emptyText }) {
             <span className="mt-2 block text-base text-slate-600">
               {FREQUENCY_LABELS[med.frequency]}: {med.times.map(formatClockTime).join(', ')}
             </span>
-            <span className="mt-1 block text-sm text-slate-500">
+            <span className="mt-1 block text-base text-slate-500">
               From {formatCalendarDate(med.start_date)}
               {med.end_date ? ` until ${formatCalendarDate(med.end_date)}` : ''}
             </span>

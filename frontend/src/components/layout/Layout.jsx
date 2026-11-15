@@ -1,8 +1,12 @@
+import { Suspense, useRef } from 'react'
 import { Outlet } from 'react-router-dom'
+import PageLoader from '../ui/PageLoader'
 import Footer from './Footer'
 import Header from './Header'
+import RouteAnnouncer from './RouteAnnouncer'
 
 export default function Layout() {
+  const mainRef = useRef(null)
   return (
     <div className="flex min-h-screen flex-col">
       <a
@@ -11,9 +15,18 @@ export default function Layout() {
       >
         Skip to main content
       </a>
+      <RouteAnnouncer mainRef={mainRef} />
       <Header />
-      <main id="main" className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6 lg:px-8">
-        <Outlet />
+      <main
+        id="main"
+        ref={mainRef}
+        tabIndex={-1}
+        className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 focus:outline-none sm:px-6 lg:px-8"
+      >
+        {/* Lazy pages show the standard loader (an accessible status message) while their code loads. */}
+        <Suspense fallback={<PageLoader label="Loading page…" />}>
+          <Outlet />
+        </Suspense>
       </main>
       <Footer />
     </div>

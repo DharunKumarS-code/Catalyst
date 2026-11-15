@@ -8,7 +8,7 @@ const STYLES = {
 
 export default function RoleBadge({ role }) {
   return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${STYLES[role] ?? 'bg-slate-100 text-slate-700 ring-slate-200'}`}>
+    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-sm font-medium ring-1 ring-inset ${STYLES[role] ?? 'bg-slate-100 text-slate-700 ring-slate-200'}`}>
       {ROLE_LABELS[role] ?? role}
     </span>
   )

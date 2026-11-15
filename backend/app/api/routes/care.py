@@ -10,7 +10,6 @@ from fastapi import APIRouter, Depends
 from app.api.deps import get_appointment_repository, get_profile_repository, get_relationship_repository
 from app.api.medication_access import get_medication_service, member_user
 from app.core.time import utc_now
-from app.db.ids import to_object_id
 from app.repositories.appointments import AppointmentRepository
 from app.repositories.profiles import ProfileRepository
 from app.repositories.relationships import RelationshipRepository
@@ -31,4 +30,4 @@ def care_dashboard(
     appointments: AppointmentRepository = Depends(get_appointment_repository),
 ) -> CareDashboard:
     service = CareDashboardService(relationships, profiles, medications, appointments)
-    return service.build(to_object_id(user.id), user.is_demo, utc_now())
+    return service.build(user.oid, user.is_demo, utc_now(), member=user)

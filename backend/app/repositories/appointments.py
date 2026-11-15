@@ -9,6 +9,9 @@ from pymongo.errors import DuplicateKeyError
 
 from app.db.indexes import APPOINTMENTS_COLLECTION
 
+# The status `history` is an audit trail that no API response uses: never load it for reads.
+WITHOUT_HISTORY = {"history": 0}
+
 
 class DuplicateAppointmentError(Exception):
     pass
@@ -26,16 +29,16 @@ class AppointmentRepository:
         return doc
 
     def get(self, appointment_id: ObjectId, user_id: ObjectId) -> dict | None:
-        return self._appts.find_one({"_id": appointment_id, "user_id": user_id})
+        return self._appts.find_one({"_id": appointment_id, "user_id": user_id}, WITHOUT_HISTORY)
 
     def upcoming(self, user_id: ObjectId, now: datetime, limit: int) -> list[dict]:
         query = {"user_id": user_id, "status": "scheduled", "scheduled_at": {"$gte": now}}
-        return list(self._appts.find(query).sort("scheduled_at", 1).limit(limit))
+        return list(self._appts.find(query, WITHOUT_HISTORY).sort("scheduled_at", 1).limit(limit))
 
     def history(self, user_id: ObjectId, now: datetime, limit: int) -> list[dict]:
         """Past appointments plus anything completed or cancelled, newest first."""
         query = {"user_id": user_id, "$or": [{"scheduled_at": {"$lt": now}}, {"status": {"$ne": "scheduled"}}]}
-        return list(self._appts.find(query).sort("scheduled_at", -1).limit(limit))
+        return list(self._appts.find(query, WITHOUT_HISTORY).sort("scheduled_at", -1).limit(limit))
 
     def update_scheduled(self, appointment_id: ObjectId, user_id: ObjectId, changes: dict) -> dict | None:
         """Edit only while still scheduled (atomic: a concurrent cancel wins cleanly)."""
@@ -43,6 +46,7 @@ class AppointmentRepository:
             return self._appts.find_one_and_update(
                 {"_id": appointment_id, "user_id": user_id, "status": "scheduled"},
                 {"$set": changes},
+                projection=WITHOUT_HISTORY,
                 return_document=ReturnDocument.AFTER,
             )
         except DuplicateKeyError as exc:
@@ -59,6 +63,7 @@ class AppointmentRepository:
                 "$set": {"status": new, "status_changed_at": now, "updated_at": now},
                 "$push": {"history": {"from": "scheduled", "to": new, "at": now}},
             },
+            projection=WITHOUT_HISTORY,
             return_document=ReturnDocument.AFTER,
         )
 
@@ -66,8 +71,9 @@ class AppointmentRepository:
         self, user_ids: list[ObjectId], now: datetime, per_user: int
     ) -> dict[ObjectId, tuple[list[dict], int]]:
         """The next `per_user` scheduled appointments of each owner, in one aggregation."""
-        pipeline = [
+        pipeline: list[dict] = [
             {"$match": {"user_id": {"$in": user_ids}, "status": "scheduled", "scheduled_at": {"$gte": now}}},
+            {"$project": WITHOUT_HISTORY},
             {"$sort": {"scheduled_at": 1}},
             {"$group": {"_id": "$user_id", "items": {"$push": "$$ROOT"}, "total": {"$sum": 1}}},
             {"$project": {"items": {"$slice": ["$items", per_user]}, "total": 1}},
@@ -77,7 +83,17 @@ class AppointmentRepository:
     def recently_updated(self, user_ids: list[ObjectId], since: datetime, limit: int) -> list[dict]:
         """Appointments completed or cancelled since `since`, newest change first."""
         query = {"user_id": {"$in": user_ids}, "status": {"$ne": "scheduled"}, "status_changed_at": {"$gte": since}}
-        return list(self._appts.find(query).sort("status_changed_at", -1).limit(limit))
+        return list(self._appts.find(query, WITHOUT_HISTORY).sort("status_changed_at", -1).limit(limit))
 
     def count(self, user_id: ObjectId) -> int:
         return self._appts.count_documents({"user_id": user_id})
+
+    # ---- reminder engine ----
+
+    def scheduled_between(self, after: datetime, until: datetime) -> list[dict]:
+        """Scheduled appointments in (after, until], across all owners."""
+        query = {"status": "scheduled", "scheduled_at": {"$gt": after, "$lte": until}}
+        return list(self._appts.find(query, WITHOUT_HISTORY))
+
+    def state_of(self, appointment_id: ObjectId) -> dict | None:
+        return self._appts.find_one({"_id": appointment_id}, {"status": 1, "scheduled_at": 1})

@@ -25,3 +25,16 @@ export async function sendTestNotification() {
   const { data } = await apiClient.post('/api/notifications/test')
   return data
 }
+
+/** Unread notifications since the history was last opened: `{ unread, seen_at }`. */
+export async function getUnreadCount(signal) {
+  const { data } = await apiClient.get('/api/notifications/unread-count', { signal })
+  return data
+}
+
+export async function markNotificationsSeen() {
+  await apiClient.post('/api/notifications/seen')
+}
+
+/** Fired after the history is opened, so the header badge clears without another request. */
+export const NOTIFICATIONS_SEEN_EVENT = 'eldercare:notifications-seen'

@@ -6,7 +6,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.api.deps import get_profile_repository, require_roles
 from app.api.medication_access import get_medication_service
 from app.core.time import DEFAULT_TIMEZONE, utc_now
-from app.db.ids import to_object_id
 from app.repositories.profiles import ProfileAlreadyExistsError, ProfileRepository
 from app.schemas.profile import ProfileIn, ProfileOut
 from app.schemas.user import Role, UserPublic
@@ -23,7 +22,7 @@ def get_my_profile(
     user: UserPublic = Depends(elderly_user),
     profiles: ProfileRepository = Depends(get_profile_repository),
 ) -> ProfileOut:
-    doc = profiles.get_by_user(to_object_id(user.id))
+    doc = profiles.get_by_user(user.oid)
     if doc is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, NOT_FOUND)
     return ProfileOut.from_document(doc)
@@ -36,7 +35,7 @@ def create_my_profile(
     profiles: ProfileRepository = Depends(get_profile_repository),
 ) -> ProfileOut:
     try:
-        doc = profiles.create(to_object_id(user.id), body.to_document(), is_demo=user.is_demo)
+        doc = profiles.create(user.oid, body.to_document(), is_demo=user.is_demo)
     except ProfileAlreadyExistsError:
         raise HTTPException(status.HTTP_409_CONFLICT, "You already have a profile. Update it instead.") from None
     return ProfileOut.from_document(doc)
@@ -49,7 +48,7 @@ def update_my_profile(
     profiles: ProfileRepository = Depends(get_profile_repository),
     medications: MedicationService = Depends(get_medication_service),
 ) -> ProfileOut:
-    owner_id = to_object_id(user.id)
+    owner_id = user.oid
     before = profiles.get_by_user(owner_id)
     doc = profiles.update(owner_id, body.to_document())
     if doc is None or before is None:

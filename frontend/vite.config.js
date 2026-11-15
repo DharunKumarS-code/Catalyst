@@ -11,5 +11,13 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.js'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text-summary', 'json-summary', 'html'],
+      include: ['src/**/*.{js,jsx}'],
+      exclude: ['src/test/**', 'src/main.jsx'],
+      // Floors just below the measured values, so coverage cannot silently regress.
+      thresholds: { lines: 80, statements: 80, functions: 75, branches: 70 },
+    },
   },
 })

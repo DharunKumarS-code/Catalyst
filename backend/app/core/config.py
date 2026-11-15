@@ -52,9 +52,38 @@ class Settings(BaseSettings):
     invitation_max_pending: int = Field(default=10, ge=1, le=100)
     redeem_max_failures: int = Field(default=5, ge=1, le=50)
     redeem_failure_window_minutes: int = Field(default=15, ge=1, le=1440)
-    # Sign-in throttling: after N failed attempts for one email, further attempts get 429 for the window.
+    # Sign-in throttling, in three buckets per window (all return the same generic 429):
+    # - one email from one IP: stops guessing without letting an attacker lock the real user out
+    #   (the user signs in from a different IP);
+    # - one IP across all emails: stops credential stuffing;
+    # - one email across all IPs: a high backstop against distributed guessing.
     login_max_failures: int = Field(default=10, ge=3, le=100)
+    login_ip_max_failures: int = Field(default=50, ge=5, le=10000)
+    login_email_max_failures: int = Field(default=100, ge=10, le=10000)
     login_failure_window_minutes: int = Field(default=15, ge=1, le=1440)
+    # Registrations allowed per IP per window.
+    register_max_per_ip: int = Field(default=20, ge=1, le=10000)
+    register_window_minutes: int = Field(default=60, ge=1, le=1440)
+    # Header holding the real client IP when behind a proxy that overwrites it (e.g. CF-Connecting-IP
+    # behind Cloudflare). Never use a header clients can set themselves.
+    client_ip_header: str | None = None
+    # Argon2 uses ~64 MiB per hash: cap concurrent hashes so a burst cannot exhaust memory.
+    password_hash_concurrency: int = Field(default=4, ge=1, le=64)
+
+    @field_validator("client_ip_header", mode="before")
+    @classmethod
+    def _blank_header_is_none(cls, value: object) -> object:
+        return None if isinstance(value, str) and not value.strip() else value
+
+    @property
+    def ip_limits_active(self) -> bool:
+        """Per-IP limits need a trustworthy client IP. In production that means CLIENT_IP_HEADER
+        must be set: behind a proxy every request may share the proxy's address, and a per-IP
+        limit would then become a global lockout. Locally the socket address is the client."""
+        return self.client_ip_header is not None or not self.is_production
+
+    # Notification history is kept for this many days, then removed by a TTL index.
+    notification_retention_days: int = Field(default=180, ge=7, le=3650)
 
     # --- Notifications (Phase 7) ---
     # Background scheduler: checks for due reminders/alerts every N seconds (no external queue).

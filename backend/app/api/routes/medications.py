@@ -17,6 +17,7 @@ from app.schemas.medication import (
     DoseStatusUpdate,
     MedicationIn,
     MedicationOut,
+    MedicationOverview,
     TodaySchedule,
 )
 from app.services.medications import DoseRuleError, MedicationService, Scope
@@ -57,6 +58,15 @@ def _today(scope: Scope, service: MedicationService) -> TodaySchedule:
     return TodaySchedule(date=day, timezone=scope.timezone_name, doses=doses)
 
 
+def _overview(scope: Scope, service: MedicationService) -> MedicationOverview:
+    day, doses, adherence, meds = service.overview(scope, utc_now())
+    return MedicationOverview(
+        today=TodaySchedule(date=day, timezone=scope.timezone_name, doses=doses),
+        adherence=adherence,
+        medications=[MedicationOut.from_document(m) for m in meds],
+    )
+
+
 def _history(scope: Scope, service: MedicationService, days: int, medication_id: str | None, limit: int):
     return service.history(scope, utc_now(), days=days, medication_id=_optional_med_id(medication_id), limit=limit)
 
@@ -84,6 +94,15 @@ def create_medication(
     service: MedicationService = Depends(get_medication_service),
 ):
     return MedicationOut.from_document(service.create(scope, body.to_document(), utc_now()))
+
+
+# Declared before /medications/{medication_id} so "overview" is not taken as an id.
+@router.get("/medications/overview", response_model=MedicationOverview)
+def medication_overview(
+    scope: Scope = Depends(owner_scope), service: MedicationService = Depends(get_medication_service)
+):
+    """Today's doses, adherence and medications in one request (the three separate endpoints remain)."""
+    return _overview(scope, service)
 
 
 @router.get("/medications/{medication_id}", response_model=MedicationOut)
@@ -183,7 +202,7 @@ def adherence(
     return service.adherence(scope, utc_now(), _optional_med_id(medication_id))
 
 
-# ---- members: read-only views of a linked profile -------------------------------------------
+# ---- members: views of a linked profile (read-only, except doses a caretaker is allowed to record) ----
 
 LINKED = "/linked-profiles/{profile_id}"
 
@@ -195,6 +214,13 @@ def linked_medications(
     service: MedicationService = Depends(get_medication_service),
 ):
     return _list(scope, service, status_filter)
+
+
+@router.get(LINKED + "/medications/overview", response_model=MedicationOverview)
+def linked_medication_overview(
+    scope: Scope = Depends(member_scope), service: MedicationService = Depends(get_medication_service)
+):
+    return _overview(scope, service)
 
 
 @router.get(LINKED + "/medications/{medication_id}", response_model=MedicationOut)
@@ -229,3 +255,15 @@ def linked_adherence(
     service: MedicationService = Depends(get_medication_service),
 ):
     return service.adherence(scope, utc_now(), _optional_med_id(medication_id))
+
+
+@router.patch(LINKED + "/doses/{dose_id}/status", response_model=DoseOut)
+def linked_update_dose_status(
+    dose_id: str,
+    body: DoseStatusUpdate,
+    scope: Scope = Depends(member_scope),
+    service: MedicationService = Depends(get_medication_service),
+):
+    """A caretaker records a dose they gave. Allowed only while the elderly owner's grant is set
+    on the active relationship (403 otherwise); the change is attributed to the caretaker."""
+    return update_dose_status(dose_id, body, scope, service)

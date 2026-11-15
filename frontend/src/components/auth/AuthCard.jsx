@@ -9,12 +9,12 @@ export default function AuthCard({ title, subtitle, children, footer, wide = fal
           <Logo className="h-10 w-10" />
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">{title}</h1>
-            {subtitle && <p className="text-sm text-slate-600">{subtitle}</p>}
+            {subtitle && <p className="text-base text-slate-600">{subtitle}</p>}
           </div>
         </div>
         {children}
       </div>
-      {footer && <p className="mt-6 text-center text-sm text-slate-600">{footer}</p>}
+      {footer && <p className="mt-6 text-center text-base text-slate-600">{footer}</p>}
     </div>
   )
 }

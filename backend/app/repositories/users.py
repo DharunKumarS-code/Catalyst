@@ -1,6 +1,6 @@
 """Data access for the `users` collection."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from bson import ObjectId
 from bson.errors import InvalidId
@@ -30,7 +30,7 @@ class UserRepository:
         return self._users.find_one({"_id": oid})
 
     def create(self, *, name: str, email: str, password_hash: str, role: Role, is_demo: bool = False) -> dict:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         doc = {
             "name": name,
             "email": email,
@@ -55,8 +55,15 @@ class UserRepository:
     def find_demo_users(self, emails: list[str]) -> list[dict]:
         return list(self._users.find({"email": {"$in": emails}, "is_demo": True}, {"email": 1, "role": 1}))
 
+    def notifications_seen_at(self, user_id: ObjectId) -> datetime | None:
+        doc = self._users.find_one({"_id": user_id}, {"notifications_seen_at": 1}) or {}
+        return doc.get("notifications_seen_at")
+
+    def mark_notifications_seen(self, user_id: ObjectId, now: datetime) -> None:
+        self._users.update_one({"_id": user_id}, {"$set": {"notifications_seen_at": now}})
+
     def update_password_hash(self, user_id: ObjectId, password_hash: str) -> None:
         self._users.update_one(
             {"_id": user_id},
-            {"$set": {"password_hash": password_hash, "updated_at": datetime.now(timezone.utc)}},
+            {"$set": {"password_hash": password_hash, "updated_at": datetime.now(UTC)}},
         )

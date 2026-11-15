@@ -66,6 +66,13 @@ class ConnectionOut(BaseModel):
     role: Role
     member: MemberOut
     connected_at: datetime
+    can_record_doses: bool = False  # caretakers only, granted by the elderly owner
+
+
+class DosePermissionUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    can_record_doses: bool
 
 
 class LinkedProfileSummary(BaseModel):
@@ -76,12 +83,14 @@ class LinkedProfileSummary(BaseModel):
     full_name: str
     role: Role  # the viewer's role in this relationship
     connected_at: datetime
+    can_record_doses: bool = False
 
 
 class LinkedProfileDetail(BaseModel):
     relationship_id: str
     role: Role
     connected_at: datetime
+    can_record_doses: bool = False
     profile: ProfileOut
 
 

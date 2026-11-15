@@ -27,7 +27,7 @@ function Section({ id, title, action, children }) {
   )
 }
 
-function ProfileDetail({ p }) {
+function ProfileDetail({ p, onChanged }) {
   const base = `/linked/${p.profile_id}`
   return (
     <div className="flex flex-col gap-6" data-testid="profile-detail">
@@ -36,6 +36,11 @@ function ProfileDetail({ p }) {
           <h2 className="text-3xl font-semibold text-slate-900">{p.full_name}</h2>
           <p className="mt-1 inline-flex flex-wrap items-center gap-2 text-base text-slate-600">
             You are connected as <RoleBadge role={p.role} />
+          </p>
+          <p className="mt-1 text-base text-slate-700">
+            {p.can_record_doses
+              ? `${p.full_name} has allowed you to record doses you give.`
+              : 'You can view only. Doses are recorded by them, or by a caretaker they allow.'}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -47,7 +52,9 @@ function ProfileDetail({ p }) {
 
       <TodaySchedule
         schedule={{ date: p.local_date, timezone: p.timezone, doses: p.today_doses }}
-        canModify={false}
+        canModify={p.can_record_doses}
+        profileId={p.profile_id}
+        onChanged={onChanged}
         emptyText={p.active_medications === 0 ? 'No medicines have been added yet.' : undefined}
       />
 
@@ -108,7 +115,7 @@ export default function CareDashboard() {
   const header = (
     <PageHeader
       title="Care dashboard"
-      description="How the people you support are doing today. Only they can record doses or change details."
+      description="How the people you support are doing today. Only they can change their medicines and details."
       actions={
         <Button variant="secondary" onClick={reload} disabled={loading}>
           {loading && data ? 'Refreshing…' : 'Refresh'}
@@ -159,7 +166,7 @@ export default function CareDashboard() {
           <Alert variant="error">{getApiErrorMessage(error, 'Refreshing failed. Showing the last loaded information.')}</Alert>
         </div>
       )}
-      <p className="mb-4 text-sm text-slate-500" aria-live="polite">
+      <p className="mb-4 text-base text-slate-500" aria-live="polite">
         Updated {formatDateTime(data.generated_at)}
       </p>
 
@@ -180,7 +187,7 @@ export default function CareDashboard() {
         </ul>
       </section>
 
-      <ProfileDetail key={selected.profile_id} p={selected} />
+      <ProfileDetail key={selected.profile_id} p={selected} onChanged={reload} />
     </div>
   )
 }

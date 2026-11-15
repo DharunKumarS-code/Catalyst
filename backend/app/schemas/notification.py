@@ -45,6 +45,11 @@ class NotificationOut(BaseModel):
     delivery_note: str | None = None
 
 
+class UnreadCount(BaseModel):
+    unread: int  # capped at UNREAD_CAP; the UI shows "99+"
+    seen_at: datetime | None = None  # when the history was last opened; newer items are "new"
+
+
 class NotificationSystemStatus(BaseModel):
     """Safe to show anyone signed in: no hosts, usernames or secrets."""
 

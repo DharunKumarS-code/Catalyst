@@ -6,8 +6,8 @@
 
 @layer base {
   html {
-    /* Slightly larger base size for readability by older users. */
-    font-size: 17px;
+    /* 18px base: all rem-based sizes scale from this, so body text is never below 18px. */
+    font-size: 18px;
   }
   body {
     @apply bg-slate-50 text-slate-800 antialiased;

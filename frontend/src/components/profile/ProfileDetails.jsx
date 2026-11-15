@@ -1,7 +1,7 @@
 import { formatCalendarDate } from '../../utils/format'
 import { timeZoneLabel } from '../../utils/timezones'
 
-const NOT_PROVIDED = <span className="text-slate-400">Not provided</span>
+const NOT_PROVIDED = <span className="text-slate-600">Not provided</span>
 
 function Item({ label, children }) {
   return (

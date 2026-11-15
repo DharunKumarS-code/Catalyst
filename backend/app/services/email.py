@@ -1,7 +1,6 @@
 """SMTP delivery. Credentials come only from backend settings and never appear in errors or logs."""
 
 import smtplib
-import socket
 import ssl
 from email.message import EmailMessage
 
@@ -26,7 +25,9 @@ class SmtpSender:
         try:
             context = ssl.create_default_context()
             if s.smtp_security == "ssl":
-                server = smtplib.SMTP_SSL(s.smtp_host, s.smtp_port, timeout=s.smtp_timeout_seconds, context=context)
+                server: smtplib.SMTP = smtplib.SMTP_SSL(
+                    s.smtp_host, s.smtp_port, timeout=s.smtp_timeout_seconds, context=context
+                )
             else:
                 server = smtplib.SMTP(s.smtp_host, s.smtp_port, timeout=s.smtp_timeout_seconds)
             with server:
@@ -42,5 +43,5 @@ class SmtpSender:
             raise DeliveryError("The recipient address was rejected.") from None
         except smtplib.SMTPException as exc:
             raise DeliveryError(f"Mail server error ({type(exc).__name__}).") from None
-        except (OSError, socket.timeout):
+        except (TimeoutError, OSError):
             raise DeliveryError("Could not connect to the mail server.") from None

@@ -1,13 +1,13 @@
 """Pure schedule-generation tests: time zones, DST, start/end dates, horizon, adherence math."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from app.core.time import is_valid_timezone, zone
 from app.services.medications import adherence_percent, period
 from app.services.scheduling import plan_doses, to_utc
 
-UTC = timezone.utc
+UTC = UTC
 
 
 def med(times, start, end=None, schedule_from=None, status="active", through=None):
@@ -35,8 +35,12 @@ def test_kolkata_half_hour_offset():
 
 def test_auckland_local_date_differs_from_utc_date():
     # 08:00 on 10 June in Auckland (UTC+12) is 20:00 on 9 June in UTC.
-    planned, _ = plan_doses(med(["08:00"], "2026-06-10", "2026-06-10"), ZoneInfo("Pacific/Auckland"),
-                            datetime(2026, 6, 9, 0, 0, tzinfo=UTC), 7)
+    planned, _ = plan_doses(
+        med(["08:00"], "2026-06-10", "2026-06-10"),
+        ZoneInfo("Pacific/Auckland"),
+        datetime(2026, 6, 9, 0, 0, tzinfo=UTC),
+        7,
+    )
     assert [(p.local_date, p.scheduled_at) for p in planned] == [
         ("2026-06-10", datetime(2026, 6, 9, 20, 0, tzinfo=UTC))
     ]
@@ -78,12 +82,10 @@ def test_ended_course_and_discontinued_generate_nothing():
 
 def test_schedule_from_and_watermark_prevent_regeneration():
     now = datetime(2026, 5, 1, 12, 0, tzinfo=UTC)
-    planned, _ = plan_doses(med(["08:00", "20:00"], "2026-05-01", "2026-05-01", schedule_from=now),
-                            zone("UTC"), now, 7)
+    planned, _ = plan_doses(med(["08:00", "20:00"], "2026-05-01", "2026-05-01", schedule_from=now), zone("UTC"), now, 7)
     assert [p.local_time for p in planned] == ["20:00"]  # 08:00 is before schedule_from
     assert plan_doses(med(["08:00"], "2026-05-01", through="2026-05-08"), zone("UTC"), now, 7) == ([], None)
-    later, _ = plan_doses(med(["08:00"], "2026-05-01", through="2026-05-08"), zone("UTC"),
-                          now + timedelta(days=1), 7)
+    later, _ = plan_doses(med(["08:00"], "2026-05-01", through="2026-05-08"), zone("UTC"), now + timedelta(days=1), 7)
     assert [p.local_date for p in later] == ["2026-05-09"]  # only the newly reached day
 
 

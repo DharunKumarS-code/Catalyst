@@ -10,7 +10,7 @@ function Period({ title, period }) {
       </p>
       <p className="mt-2 text-base text-slate-700">
         {period.taken} taken &middot; {period.missed} missed &middot; {period.pending} not recorded
-        <span className="block text-sm text-slate-500">
+        <span className="block text-base text-slate-500">
           {period.total} dose{period.total === 1 ? '' : 's'} counted
         </span>
       </p>

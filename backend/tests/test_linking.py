@@ -1,9 +1,10 @@
 """Invitations, linking, relationship management, revocation and demo isolation."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from bson import ObjectId
+from pymongo.errors import DuplicateKeyError
 
 from app.db.indexes import INVITATIONS_COLLECTION, RELATIONSHIPS_COLLECTION
 from app.db.mongodb import mongodb
@@ -24,6 +25,7 @@ def elderly(client):
 
 # ---- Code generation ----
 
+
 def test_codes_are_random_well_formed_and_normalized():
     codes = {generate_code() for _ in range(200)}
     assert len(codes) == 200
@@ -37,6 +39,7 @@ def test_codes_are_random_well_formed_and_normalized():
 
 
 # ---- Invitation creation ----
+
 
 def test_create_invitation_stores_only_hash(client, elderly):
     inv = invite(client, elderly, "caretaker")
@@ -62,8 +65,16 @@ def test_invitation_requires_profile(client):
     assert res.status_code == 409
 
 
-@pytest.mark.parametrize("body", [{"role": "elderly"}, {"role": "admin"}, {"role": "caretaker", "expires_in_hours": 0},
-                                  {"role": "caretaker", "expires_in_hours": 1000}, {"role": "caretaker", "code": "x"}])
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"role": "elderly"},
+        {"role": "admin"},
+        {"role": "caretaker", "expires_in_hours": 0},
+        {"role": "caretaker", "expires_in_hours": 1000},
+        {"role": "caretaker", "code": "x"},
+    ],
+)
 def test_invitation_validation(client, elderly, body):
     assert client.post("/api/invitations", json=body, headers=elderly["headers"]).status_code == 422
 
@@ -94,6 +105,7 @@ def test_cancel_invitation(client, elderly):
 
 
 # ---- Redemption ----
+
 
 @pytest.mark.parametrize("role", ["caretaker", "family_member"])
 def test_successful_redemption_links_member(client, elderly, role):
@@ -139,7 +151,7 @@ def test_malformed_code_rejected_without_counting(client, elderly, auth_settings
 def test_expired_invitation(client, elderly):
     inv = invite(client, elderly, "caretaker")
     mongodb.db[INVITATIONS_COLLECTION].update_one(
-        {"_id": ObjectId(inv["id"])}, {"$set": {"expires_at": datetime.now(timezone.utc) - timedelta(minutes=1)}}
+        {"_id": ObjectId(inv["id"])}, {"$set": {"expires_at": datetime.now(UTC) - timedelta(minutes=1)}}
     )
     res = redeem(client, new_user(client, "caretaker"), inv["code"])
     assert res.status_code == 410
@@ -202,7 +214,7 @@ def test_rate_limit_window_expires(client, elderly, auth_settings):
     redeem(client, member, FAKE_CODE)
     redeem(client, member, FAKE_CODE)
     assert redeem(client, member, FAKE_CODE).status_code == 429
-    mongodb.db["redemption_failures"].update_many({}, {"$set": {"created_at": datetime.now(timezone.utc) - timedelta(hours=1)}})
+    mongodb.db["redemption_failures"].update_many({}, {"$set": {"created_at": datetime.now(UTC) - timedelta(hours=1)}})
     assert redeem(client, member, invite(client, elderly, "caretaker")["code"]).status_code == 201
 
 
@@ -224,11 +236,12 @@ def test_partial_unique_index_blocks_duplicate_active_relationship(client, elder
     redeem(client, member, invite(client, elderly, "caretaker")["code"])
     rel = mongodb.db[RELATIONSHIPS_COLLECTION].find_one()
     dup = {k: v for k, v in rel.items() if k != "_id"}
-    with pytest.raises(Exception):
+    with pytest.raises(DuplicateKeyError):
         mongodb.db[RELATIONSHIPS_COLLECTION].insert_one(dup)
 
 
 # ---- Relationship management / revocation ----
+
 
 def test_revocation_removes_access_immediately(client, elderly):
     member = new_user(client, "family_member")
@@ -355,11 +368,17 @@ def test_real_member_cannot_redeem_demo_invitation(client, demo):
 def test_demo_member_cannot_view_real_profile_even_with_forged_relationship(client, elderly, demo):
     """Defense in depth: even if a cross-partition relationship row existed, it is ignored."""
     demo_user = UserRepository(mongodb.db).get_by_email("caretaker.demo@eldercare.com")
-    mongodb.db[RELATIONSHIPS_COLLECTION].insert_one({
-        "profile_id": ObjectId(elderly["profile"]["id"]), "elderly_user_id": ObjectId(elderly["user"]["id"]),
-        "member_user_id": demo_user["_id"], "role": "caretaker", "status": "active", "is_demo": False,
-        "created_at": datetime.now(timezone.utc),
-    })
+    mongodb.db[RELATIONSHIPS_COLLECTION].insert_one(
+        {
+            "profile_id": ObjectId(elderly["profile"]["id"]),
+            "elderly_user_id": ObjectId(elderly["user"]["id"]),
+            "member_user_id": demo_user["_id"],
+            "role": "caretaker",
+            "status": "active",
+            "is_demo": False,
+            "created_at": datetime.now(UTC),
+        }
+    )
     headers = demo["caretaker"]["headers"]
     assert client.get(f"/api/linked-profiles/{elderly['profile']['id']}", headers=headers).status_code == 404
     assert client.get("/api/linked-profiles", headers=headers).json() == []

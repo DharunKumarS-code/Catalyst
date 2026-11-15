@@ -1,6 +1,6 @@
 """Appointment API tests (local throwaway MongoDB, frozen clock)."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -11,7 +11,7 @@ from app.demo.sample_data import provision_demo_sample_data
 from app.repositories.users import UserRepository
 from tests.helpers import create_profile, invite, new_user, redeem
 
-UTC = timezone.utc
+UTC = UTC
 T0 = datetime(2026, 11, 16, 12, 0, tzinfo=UTC)
 
 APPT = {
@@ -75,8 +75,16 @@ def test_create_and_retrieve(client, owner):
 
 
 def test_optional_fields_and_ordering(client, owner):
-    later = add(client, owner, appointment_date="2026-12-01", specialization="", clinic_address=" ",
-                appointment_type=None, reason=None, notes=None)
+    later = add(
+        client,
+        owner,
+        appointment_date="2026-12-01",
+        specialization="",
+        clinic_address=" ",
+        appointment_type=None,
+        reason=None,
+        notes=None,
+    )
     sooner = add(client, owner, doctor_name="Dr. Other")
     assert later["specialization"] is None and later["clinic_address"] is None
     assert [x["id"] for x in listing(client, owner)] == [sooner["id"], later["id"]]
@@ -84,8 +92,11 @@ def test_optional_fields_and_ordering(client, owner):
 
 def test_edit(client, owner):
     a = add(client, owner)
-    res = client.put(f"/api/appointments/{a['id']}", json={**APPT, "appointment_time": "15:00", "notes": ""},
-                     headers=owner["headers"])
+    res = client.put(
+        f"/api/appointments/{a['id']}",
+        json={**APPT, "appointment_time": "15:00", "notes": ""},
+        headers=owner["headers"],
+    )
     assert res.status_code == 200
     body = res.json()
     assert body["appointment_time"] == "15:00" and body["notes"] is None
@@ -157,8 +168,11 @@ def test_invalid_input_rejected(client, owner, patch):
 
 
 def test_past_time_rejected_with_field_error(client, owner):
-    res = client.post("/api/appointments", json={**APPT, "appointment_date": "2026-11-16", "appointment_time": "11:59"},
-                      headers=owner["headers"])
+    res = client.post(
+        "/api/appointments",
+        json={**APPT, "appointment_date": "2026-11-16", "appointment_time": "11:59"},
+        headers=owner["headers"],
+    )
     assert res.status_code == 422
     assert res.json()["detail"][0]["loc"] == ["body", "appointment_date"]
 
@@ -179,8 +193,11 @@ def test_timezone_conversion(client, clock):
 def test_nonexistent_dst_time_rejected(client, clock):
     user = new_user(client, "elderly")
     create_profile(client, user, timezone="America/New_York")
-    res = client.post("/api/appointments", json={**APPT, "appointment_date": "2027-03-14", "appointment_time": "02:30"},
-                      headers=user["headers"])
+    res = client.post(
+        "/api/appointments",
+        json={**APPT, "appointment_date": "2027-03-14", "appointment_time": "02:30"},
+        headers=user["headers"],
+    )
     assert res.status_code == 422 and res.json()["detail"][0]["loc"] == ["body", "appointment_time"]
 
 

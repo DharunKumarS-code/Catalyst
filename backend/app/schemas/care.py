@@ -26,6 +26,7 @@ class CareProfileSummary(BaseModel):
     relationship_id: str
     role: str  # how the viewer is connected: caretaker / family_member
     connected_at: datetime
+    can_record_doses: bool = False  # the viewer may record doses for this person
     full_name: str
     date_of_birth: date | None = None
     phone: str | None = None
